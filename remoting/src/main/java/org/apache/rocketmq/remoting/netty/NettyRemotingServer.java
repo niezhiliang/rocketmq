@@ -192,7 +192,9 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
                     return new Thread(r, "NettyServerCodecThread_" + this.threadIndex.incrementAndGet());
                 }
             });
-
+        /**
+         * 准备Netty共享的处理器
+         */
         prepareSharableHandlers();
 
         ServerBootstrap childHandler =
@@ -236,6 +238,9 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
             this.nettyEventExecutor.start();
         }
 
+        /**
+         * 定时清理过期请求
+         */
         this.timer.scheduleAtFixedRate(new TimerTask() {
 
             @Override

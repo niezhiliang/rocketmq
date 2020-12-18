@@ -889,15 +889,18 @@ public class BrokerController {
     public void start() throws Exception {
         /**
          * 1.启动刷盘线程
-         *
-         * 创建store文件夹
-         * 定时清理commitlog中72小时还未消费的消息
-         *
+         * 2.创建store文件夹
+         * 3.创建一些定时器
+         *  1.定时清理commitlog中72小时还未消费的消息
+         *  2.检查commitlog是否满了 默认大小1G
          */
         if (this.messageStore != null) {
             this.messageStore.start();
         }
 
+        /**
+         * 启动netty相关线程
+         */
         if (this.remotingServer != null) {
             this.remotingServer.start();
         }
@@ -906,6 +909,11 @@ public class BrokerController {
             this.fastRemotingServer.start();
         }
 
+        /**
+         * 启动文件监听，通过对文件进行hash 判断
+         * 新的hash和当前hash是否一致  不一致
+         * 表示文件变更了
+         */
         if (this.fileWatchService != null) {
             this.fileWatchService.start();
         }
@@ -914,14 +922,24 @@ public class BrokerController {
             this.brokerOuterAPI.start();
         }
 
+        /**
+         * TODO 不是很清楚
+         * 通知消息到达 然后写入commitlog
+         */
         if (this.pullRequestHoldService != null) {
             this.pullRequestHoldService.start();
         }
 
+        /**
+         * 启动定时器 每10s清理有问题的Netty通道
+         */
         if (this.clientHousekeepingService != null) {
             this.clientHousekeepingService.start();
         }
 
+        /**
+         * 启动定时器 每30s 通过shell脚本启动startfsrv.sh
+         */
         if (this.filterServerManager != null) {
             this.filterServerManager.start();
         }
@@ -929,9 +947,16 @@ public class BrokerController {
         if (!messageStoreConfig.isEnableDLegerCommitLog()) {
             startProcessorByHa(messageStoreConfig.getBrokerRole());
             handleSlaveSynchronize(messageStoreConfig.getBrokerRole());
+            /**
+             * 向nameservaddr注册broker
+             */
             this.registerBrokerAll(true, false, true);
         }
 
+        /**
+         * 定时向nameser注册   心跳
+         * 心跳间隔只能是10s - 60s  默认30s
+         */
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
             @Override
@@ -948,6 +973,9 @@ public class BrokerController {
             this.brokerStatsManager.start();
         }
 
+        /**
+         * 定期清理Queue中过期的请求
+         */
         if (this.brokerFastFailure != null) {
             this.brokerFastFailure.start();
         }
