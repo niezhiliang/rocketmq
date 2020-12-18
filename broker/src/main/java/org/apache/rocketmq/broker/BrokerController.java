@@ -233,9 +233,11 @@ public class BrokerController {
 
     public boolean initialize() throws CloneNotSupportedException {
         boolean result = this.topicConfigManager.load();
-
+        //加载consumer的offset
         result = result && this.consumerOffsetManager.load();
+        //TODO 加载订阅的group
         result = result && this.subscriptionGroupManager.load();
+        //加载consumer的类加载器
         result = result && this.consumerFilterManager.load();
 
         if (result) {
@@ -243,6 +245,7 @@ public class BrokerController {
                 this.messageStore =
                     new DefaultMessageStore(this.messageStoreConfig, this.brokerStatsManager, this.messageArrivingListener,
                         this.brokerConfig);
+                //是否打开了主从自动切换
                 if (messageStoreConfig.isEnableDLegerCommitLog()) {
                     DLedgerRoleChangeHandler roleChangeHandler = new DLedgerRoleChangeHandler(this, (DefaultMessageStore) messageStore);
                     ((DLedgerCommitLog)((DefaultMessageStore) messageStore).getCommitLog()).getdLedgerServer().getdLedgerLeaderElector().addRoleChangeHandler(roleChangeHandler);
@@ -257,9 +260,12 @@ public class BrokerController {
                 log.error("Failed to initialize", e);
             }
         }
-
+        //加载commitlog内容
         result = result && this.messageStore.load();
 
+        /**
+         * 实例化一系列线程池
+         */
         if (result) {
             this.remotingServer = new NettyRemotingServer(this.nettyServerConfig, this.clientHousekeepingService);
             NettyServerConfig fastConfig = (NettyServerConfig) this.nettyServerConfig.clone();
@@ -331,6 +337,9 @@ public class BrokerController {
 
             this.registerProcessor();
 
+            /**
+             * 记录broker一天拉取的消息,一天执行一次
+             */
             final long initialDelay = UtilAll.computeNextMorningTimeMillis() - System.currentTimeMillis();
             final long period = 1000 * 60 * 60 * 24;
             this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
@@ -344,6 +353,9 @@ public class BrokerController {
                 }
             }, initialDelay, period, TimeUnit.MILLISECONDS);
 
+            /**
+             * 每5s更新consumer offset的值
+             */
             this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
                 @Override
                 public void run() {
@@ -355,6 +367,9 @@ public class BrokerController {
                 }
             }, 1000 * 10, this.brokerConfig.getFlushConsumerOffsetInterval(), TimeUnit.MILLISECONDS);
 
+            /**
+             *
+             */
             this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
                 @Override
                 public void run() {
@@ -366,6 +381,9 @@ public class BrokerController {
                 }
             }, 1000 * 10, 1000 * 10, TimeUnit.MILLISECONDS);
 
+            /**
+             * 3分钟检查一次，消费者落后一定数量后 消费组暂停消费
+             */
             this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
                 @Override
                 public void run() {
@@ -377,6 +395,10 @@ public class BrokerController {
                 }
             }, 3, 3, TimeUnit.MINUTES);
 
+            /**
+             * 每分钟打印一些日志 内容包括 拉取的 Send Queue Size
+             * Pull Queue Size Query Queue Size   Transaction Queue Size
+             */
             this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
                 @Override
                 public void run() {
@@ -388,6 +410,9 @@ public class BrokerController {
                 }
             }, 10, 1, TimeUnit.SECONDS);
 
+            /**
+             * 每分钟打印一次落后的字节
+             */
             this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
                 @Override
@@ -400,6 +425,10 @@ public class BrokerController {
                 }
             }, 1000 * 10, 1000 * 60, TimeUnit.MILLISECONDS);
 
+            /**
+             * 修改nameServerAddress 如果为空 ，通过httpClient定时去拉取
+             * 这个拉取地址和consumer没设置nameServAddr拉取的地址一样
+             */
             if (this.brokerConfig.getNamesrvAddr() != null) {
                 this.brokerOuterAPI.updateNameServerAddressList(this.brokerConfig.getNamesrvAddr());
                 log.info("Set user specified name server address: {}", this.brokerConfig.getNamesrvAddr());
@@ -416,7 +445,9 @@ public class BrokerController {
                     }
                 }, 1000 * 10, 1000 * 60 * 2, TimeUnit.MILLISECONDS);
             }
-
+            /**
+             *
+             */
             if (!messageStoreConfig.isEnableDLegerCommitLog()) {
                 if (BrokerRole.SLAVE == this.messageStoreConfig.getBrokerRole()) {
                     if (this.messageStoreConfig.getHaMasterAddress() != null && this.messageStoreConfig.getHaMasterAddress().length() >= 6) {
