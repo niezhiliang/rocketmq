@@ -221,7 +221,9 @@ public class DefaultMessageStore implements MessageStore {
      * @throws Exception
      */
     public void start() throws Exception {
-
+        /**
+         * 获取文件锁，确保磁盘上的文件只会被一个messageStore读写
+         */
         lock = lockFile.getChannel().tryLock(0, 1, false);
         if (lock == null || lock.isShared() || !lock.isValid()) {
             throw new RuntimeException("Lock failed,MQ already started");
@@ -233,7 +235,9 @@ public class DefaultMessageStore implements MessageStore {
             /**
              * 1. Make sure the fast-forward messages to be truncated during the recovering according to the max physical offset of the commitlog;
              * 2. DLedger committedPos may be missing, so the maxPhysicalPosInLogicQueue maybe bigger that maxOffset returned by DLedgerCommitLog, just let it go;
+             *  通过这些consumer queue计算offset
              * 3. Calculate the reput offset according to the consume queue;
+             *  在commitlog启动之前，确定落后的消息已经被派遣了，尤其是Broker那些会自动改变的角色
              * 4. Make sure the fall-behind messages to be dispatched before starting the commitlog, especially when the broker role are automatically changed.
              */
             long maxPhysicalPosInLogicQueue = commitLog.getMinOffset();
@@ -282,12 +286,29 @@ public class DefaultMessageStore implements MessageStore {
             this.haService.start();
             this.handleScheduleMessageService(messageStoreConfig.getBrokerRole());
         }
-
+        /**
+         * 启动刷consumerQueue的线程
+         */
         this.flushConsumeQueueService.start();
+        /**
+         * 启动刷盘线程
+         */
         this.commitLog.start();
+        /**
+         * TODO 这里还要慢慢啃，看的有点迷
+         * 启动storeStats线程
+         * 主要就是抽样 判断消息体是否大于600 大于移除第一个
+         */
         this.storeStatsService.start();
-
+        /**
+         * 创建store文件夹，如果没有就创建
+         */
         this.createTempFile();
+        /**
+         * 1.定期清理commitlog72小时还未消费的消息
+         * 2.如果开了commitlog调试模式，每分钟一次将commitlog这段时间的内容输出到另外一个文件中 /家目录/debug
+         * 3.10s判断一次commitlog是否满了  默认1G大小
+         */
         this.addScheduleTask();
         this.shutdown = false;
     }
@@ -1292,6 +1313,9 @@ public class DefaultMessageStore implements MessageStore {
 
     private void addScheduleTask() {
 
+        /**
+         * 定时10s清理commitlog过期文件 默认72小时消息还没有被消费 就会被删除
+         */
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
             @Override
             public void run() {
@@ -1306,6 +1330,11 @@ public class DefaultMessageStore implements MessageStore {
             }
         }, 1, 10, TimeUnit.MINUTES);
 
+        /**
+         * 打开一个调试的日志将一定时间的commitlog写到另一个文件中
+         * 目录为家目录下的debug  文件名以开始时间戳-结束时间戳
+         * 一分钟一个文件
+         */
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
             @Override
             public void run() {
@@ -1333,6 +1362,9 @@ public class DefaultMessageStore implements MessageStore {
         // DefaultMessageStore.this.cleanExpiredConsumerQueue();
         // }
         // }, 1, 1, TimeUnit.HOURS);
+        /**
+         * 定时10s判断commitlog是否满了
+         */
         this.diskCheckScheduledExecutorService.scheduleAtFixedRate(new Runnable() {
             public void run() {
                 DefaultMessageStore.this.cleanCommitLogService.isSpaceFull();
@@ -1341,7 +1373,9 @@ public class DefaultMessageStore implements MessageStore {
     }
 
     private void cleanFilesPeriodically() {
+        //删除commit过期文件 更改删除后的文件
         this.cleanCommitLogService.run();
+        //删除consumerQueue 过期文件
         this.cleanConsumeQueueService.run();
     }
 

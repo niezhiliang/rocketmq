@@ -446,7 +446,9 @@ public class BrokerController {
                 }, 1000 * 10, 1000 * 60 * 2, TimeUnit.MILLISECONDS);
             }
             /**
-             *
+             * 如果没有打开主从自动切换功能，
+             * 如果Broker是SLAVE，高可用集群不为空，修改master地址，并将定期修改地址关闭
+             * 如果是master,打印出master和slaver之间的offset差
              */
             if (!messageStoreConfig.isEnableDLegerCommitLog()) {
                 if (BrokerRole.SLAVE == this.messageStoreConfig.getBrokerRole()) {
@@ -512,11 +514,16 @@ public class BrokerController {
             }
             initialTransaction();
             initialAcl();
+            //初始化钩子
             initialRpcHooks();
         }
         return result;
     }
 
+    /**
+     * 初始化事务消息服务和消息检查的钩子，
+     * 如果未设置用户自定义的钩子，则取系统默认的钩子
+     */
     private void initialTransaction() {
         this.transactionalMessageService = ServiceProvider.loadClass(ServiceProvider.TRANSACTION_SERVICE_ID, TransactionalMessageService.class);
         if (null == this.transactionalMessageService) {
@@ -880,6 +887,13 @@ public class BrokerController {
     }
 
     public void start() throws Exception {
+        /**
+         * 1.启动刷盘线程
+         *
+         * 创建store文件夹
+         * 定时清理commitlog中72小时还未消费的消息
+         *
+         */
         if (this.messageStore != null) {
             this.messageStore.start();
         }

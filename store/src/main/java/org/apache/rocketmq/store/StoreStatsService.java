@@ -449,10 +449,11 @@ public class StoreStatsService extends ServiceThread {
 
         while (!this.isStopped()) {
             try {
+                //延迟启动
                 this.waitForRunning(FREQUENCY_OF_SAMPLING);
-
+                //抽样？ 判断获取的消息数量大小 大于600 移除第一个
                 this.sampling();
-
+                //打印日志tps
                 this.printTps();
             } catch (Exception e) {
                 log.warn(this.getServiceName() + " service has exception. ", e);
