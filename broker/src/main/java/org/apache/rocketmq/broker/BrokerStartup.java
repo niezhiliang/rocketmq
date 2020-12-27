@@ -117,7 +117,7 @@ public class BrokerStartup {
             nettyServerConfig.setListenPort(10911);
             final MessageStoreConfig messageStoreConfig = new MessageStoreConfig();
 
-            //如果是集群中的Slave
+            //如果是集群中的Slave,接受消息最大比例为内存的30%
             if (BrokerRole.SLAVE == messageStoreConfig.getBrokerRole()) {
                 int ratio = messageStoreConfig.getAccessMessageInMemoryMaxRatio() - 10;
                 messageStoreConfig.setAccessMessageInMemoryMaxRatio(ratio);
@@ -136,7 +136,7 @@ public class BrokerStartup {
                     MixAll.properties2Object(properties, nettyServerConfig);
                     MixAll.properties2Object(properties, nettyClientConfig);
                     MixAll.properties2Object(properties, messageStoreConfig);
-
+                    //设置启动的配置文件路径
                     BrokerPathConfigHelper.setBrokerConfigPath(file);
                     in.close();
                 }
@@ -181,6 +181,9 @@ public class BrokerStartup {
                     break;
             }
 
+            /**
+             * 如果开了dleger,将broker状态设置为异常
+             */
             if (messageStoreConfig.isEnableDLegerCommitLog()) {
                 brokerConfig.setBrokerId(-1);
             }
@@ -228,7 +231,10 @@ public class BrokerStartup {
                 controller.shutdown();
                 System.exit(-3);
             }
-
+            /**
+             * 向系统注册一个关闭前执行的钩子
+             * 当jvm关闭的时候，会执行所有添加的addShutdownHook钩子
+             */
             Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
                 private volatile boolean hasShutdown = false;
                 private AtomicInteger shutdownTimes = new AtomicInteger(0);
@@ -240,6 +246,9 @@ public class BrokerStartup {
                         if (!this.hasShutdown) {
                             this.hasShutdown = true;
                             long beginTime = System.currentTimeMillis();
+                            /**
+                             * 关闭定时器，先namerServer注销注册信息
+                             */
                             controller.shutdown();
                             long consumingTimeTotal = System.currentTimeMillis() - beginTime;
                             log.info("Shutdown hook over, consuming total time(ms): {}", consumingTimeTotal);

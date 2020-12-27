@@ -186,6 +186,9 @@ public class DefaultMessageStore implements MessageStore {
             log.info("last shutdown {}", lastExitOK ? "normally" : "abnormally");
 
             if (null != scheduleMessageService) {
+                /**
+                 * 延迟消息加载延迟级别到内存中
+                 */
                 result = result && this.scheduleMessageService.load();
             }
 
@@ -234,6 +237,7 @@ public class DefaultMessageStore implements MessageStore {
         {
             /**
              * 1. Make sure the fast-forward messages to be truncated during the recovering according to the max physical offset of the commitlog;
+             * 根据commitlog的最大物理偏移量，确定恢复过程中要截断的快进消息
              * 2. DLedger committedPos may be missing, so the maxPhysicalPosInLogicQueue maybe bigger that maxOffset returned by DLedgerCommitLog, just let it go;
              *  通过这些consumer queue计算offset
              * 3. Calculate the reput offset according to the consume queue;
@@ -305,7 +309,7 @@ public class DefaultMessageStore implements MessageStore {
          */
         this.createTempFile();
         /**
-         * 1.定期清理commitlog72小时还未消费的消息
+         * 1.
          * 2.如果开了commitlog调试模式，每分钟一次将commitlog这段时间的内容输出到另外一个文件中 /家目录/debug
          * 3.10s判断一次commitlog是否满了  默认1G大小
          */
@@ -441,12 +445,14 @@ public class DefaultMessageStore implements MessageStore {
             return CompletableFuture.completedFuture(new PutMessageResult(checkStoreStatus, null));
         }
 
+        //校验消息 topic长度限制127个字符  和properties length最大长度为32767
         PutMessageStatus msgCheckStatus = this.checkMessage(msg);
         if (msgCheckStatus == PutMessageStatus.MESSAGE_ILLEGAL) {
             return CompletableFuture.completedFuture(new PutMessageResult(msgCheckStatus, null));
         }
 
         long beginTime = this.getSystemClock().now();
+        //开始异步刷盘
         CompletableFuture<PutMessageResult> putResultFuture = this.commitLog.asyncPutMessage(msg);
 
         putResultFuture.thenAccept((result) -> {
@@ -1851,6 +1857,7 @@ public class DefaultMessageStore implements MessageStore {
 
             long logicsMsgTimestamp = 0;
 
+            //60s
             int flushConsumeQueueThoroughInterval = DefaultMessageStore.this.getMessageStoreConfig().getFlushConsumeQueueThoroughInterval();
             long currentTimeMillis = System.currentTimeMillis();
             if (currentTimeMillis >= (this.lastFlushTimestamp + flushConsumeQueueThoroughInterval)) {
@@ -1890,7 +1897,7 @@ public class DefaultMessageStore implements MessageStore {
                     DefaultMessageStore.log.warn(this.getServiceName() + " service has exception. ", e);
                 }
             }
-
+            //失败重新刷三次
             this.doFlush(RETRY_TIMES_OVER);
 
             DefaultMessageStore.log.info(this.getServiceName() + " service end");

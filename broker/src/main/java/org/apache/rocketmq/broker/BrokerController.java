@@ -512,7 +512,9 @@ public class BrokerController {
                     log.warn("FileWatchService created error, can't load the certificate dynamically");
                 }
             }
+            //初始化事务消息的处理Service 和消息状态回查的Service
             initialTransaction();
+            //初始化访问控制列表
             initialAcl();
             //初始化钩子
             initialRpcHooks();
@@ -939,13 +941,19 @@ public class BrokerController {
 
         /**
          * 启动定时器 每30s 通过shell脚本启动startfsrv.sh
+         * 自定义消息过滤服务，如果用系统的tag或者是sql 不需要开启该服务
          */
         if (this.filterServerManager != null) {
             this.filterServerManager.start();
         }
 
+        /**
+         * 没开启Dleger 则使用的是系统默认的CommitLog
+         */
         if (!messageStoreConfig.isEnableDLegerCommitLog()) {
+            //如果是master 事务消息回调启动 默认6s一次 最多15次
             startProcessorByHa(messageStoreConfig.getBrokerRole());
+            //如果是slave 10s同步一次master信息
             handleSlaveSynchronize(messageStoreConfig.getBrokerRole());
             /**
              * 向nameservaddr注册broker
@@ -969,6 +977,7 @@ public class BrokerController {
             }
         }, 1000 * 10, Math.max(10000, Math.min(brokerConfig.getRegisterNameServerPeriod(), 60000)), TimeUnit.MILLISECONDS);
 
+        //空实现
         if (this.brokerStatsManager != null) {
             this.brokerStatsManager.start();
         }

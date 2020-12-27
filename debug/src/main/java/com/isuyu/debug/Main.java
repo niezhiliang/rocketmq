@@ -15,7 +15,7 @@ import java.util.concurrent.TimeUnit;
  * @date : 2020/12/12
  */
 public class Main {
-    private static final String NAMESRV_ADDR = "120.78.149.247:9876";
+    private static final String NAMESRV_ADDR = "192.168.3.6:9876";
 
     private static final String PRODUCER_GROUP = "test-group";
 

@@ -174,6 +174,9 @@ public class RouteInfoManager {
                     }
                 }
 
+                /**
+                 * 如果注册的不是master,
+                 */
                 if (MixAll.MASTER_ID != brokerId) {
                     String masterAddr = brokerData.getBrokerAddrs().get(MixAll.MASTER_ID);
                     if (masterAddr != null) {

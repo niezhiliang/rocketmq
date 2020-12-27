@@ -561,6 +561,18 @@ public class CommitLog {
         return beginTimeInLock;
     }
 
+    /**
+     * broker本身接受到的消息异步刷盘
+     * 1.判断是不是延迟消息，如果是延迟消息，将消息发送到系统延迟Topic的对应延迟队列中，并备份一下原始的topic和queueid
+     * ，方便后续触发延迟消息时，能准确放到对应的topic和queue中
+     * 2.获取最新的mappedFile文件，如果没有或者mappedFile写满了，都创建一个新的mappedFile 命名规则 20个0，然后将后几位替换成当前mapped最小的offset
+     * 3.以append的形式将消息追加到缓冲区中
+     * 4.统计topic put消息的条数和消息的大小
+     * 5.提交刷盘请求和消息同步请求
+     * 6.CompletableFuture处理刷盘和同步请求
+     * @param msg
+     * @return
+     */
     public CompletableFuture<PutMessageResult> asyncPutMessage(final MessageExtBrokerInner msg) {
         // Set the storage time
         msg.setStoreTimestamp(System.currentTimeMillis());
@@ -576,18 +588,21 @@ public class CommitLog {
         int queueId = msg.getQueueId();
 
         final int tranType = MessageSysFlag.getTransactionValue(msg.getSysFlag());
+        //判断是否是事务消息
         if (tranType == MessageSysFlag.TRANSACTION_NOT_TYPE
                 || tranType == MessageSysFlag.TRANSACTION_COMMIT_TYPE) {
-            // Delay Delivery
+            // Delay Delivery  延迟消息  实时消息TimeLevel=0
             if (msg.getDelayTimeLevel() > 0) {
                 if (msg.getDelayTimeLevel() > this.defaultMessageStore.getScheduleMessageService().getMaxDelayLevel()) {
                     msg.setDelayTimeLevel(this.defaultMessageStore.getScheduleMessageService().getMaxDelayLevel());
                 }
 
+                //系统延迟队列Topic
                 topic = TopicValidator.RMQ_SYS_SCHEDULE_TOPIC;
+                //消息延迟等级对应的queueId
                 queueId = ScheduleMessageService.delayLevel2QueueId(msg.getDelayTimeLevel());
 
-                // Backup real topic, queueId
+                // 备份实际的topic和queueId等触发延迟消息发送时，将消息投到原本的topic中
                 MessageAccessor.putProperty(msg, MessageConst.PROPERTY_REAL_TOPIC, msg.getTopic());
                 MessageAccessor.putProperty(msg, MessageConst.PROPERTY_REAL_QUEUE_ID, String.valueOf(msg.getQueueId()));
                 msg.setPropertiesString(MessageDecoder.messageProperties2String(msg.getProperties()));
@@ -599,6 +614,7 @@ public class CommitLog {
 
         long elapsedTimeInLock = 0;
         MappedFile unlockMappedFile = null;
+        //得到最新的mappedFile 可能为空
         MappedFile mappedFile = this.mappedFileQueue.getLastMappedFile();
 
         putMessageLock.lock(); //spin or ReentrantLock ,depending on store config
@@ -607,9 +623,9 @@ public class CommitLog {
             this.beginTimeInLock = beginLockTimestamp;
 
             // Here settings are stored timestamp, in order to ensure an orderly
-            // global
+            // global  为了确保全局的顺序，设置时间戳
             msg.setStoreTimestamp(beginLockTimestamp);
-
+            //如果mappedFile为空，创建一个新的mappedFile
             if (null == mappedFile || mappedFile.isFull()) {
                 mappedFile = this.mappedFileQueue.getLastMappedFile(0); // Mark: NewFile may be cause noise
             }
@@ -618,11 +634,12 @@ public class CommitLog {
                 beginTimeInLock = 0;
                 return CompletableFuture.completedFuture(new PutMessageResult(PutMessageStatus.CREATE_MAPEDFILE_FAILED, null));
             }
-
+            //以append方式添加消息内容到缓冲区
             result = mappedFile.appendMessage(msg, this.appendMessageCallback);
             switch (result.getStatus()) {
                 case PUT_OK:
                     break;
+                //如果文件满了 创建一个新的文件 再append一次
                 case END_OF_FILE:
                     unlockMappedFile = mappedFile;
                     // Create a new file, re-write the message
@@ -680,6 +697,13 @@ public class CommitLog {
         });
     }
 
+    /**
+     * 消息异步落盘
+     * 1.判断是不是事务消息和实时消息，事务消息不支持异步落盘
+     * 2.
+     * @param messageExtBatch
+     * @return
+     */
     public CompletableFuture<PutMessageResult> asyncPutMessages(final MessageExtBatch messageExtBatch) {
         messageExtBatch.setStoreTimestamp(System.currentTimeMillis());
         AppendMessageResult result;
@@ -957,6 +981,7 @@ public class CommitLog {
             return CompletableFuture.completedFuture(PutMessageStatus.PUT_OK);
         }
     }
+
 
     public CompletableFuture<PutMessageStatus> submitReplicaRequest(AppendMessageResult result, PutMessageResult putMessageResult,
                                                         MessageExt messageExt) {
@@ -1457,7 +1482,7 @@ public class CommitLog {
                 if (!this.requestsRead.isEmpty()) {
                     for (GroupCommitRequest req : this.requestsRead) {
                         // There may be a message in the next file, so a maximum of
-                        // two times the flush
+                        // two times the flush   刷盘时，消息可能会写到写下一个文件 所以最多需要刷两次
                         boolean flushOK = false;
                         for (int i = 0; i < 2 && !flushOK; i++) {
                             flushOK = CommitLog.this.mappedFileQueue.getFlushedWhere() >= req.getNextOffset();

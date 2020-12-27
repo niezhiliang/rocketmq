@@ -67,6 +67,9 @@ public abstract class ConfigManager {
 
     public abstract void decode(final String jsonString);
 
+    /**
+     * offset持久化到磁盘
+     */
     public synchronized void persist() {
         String jsonString = this.encode(true);
         if (jsonString != null) {
