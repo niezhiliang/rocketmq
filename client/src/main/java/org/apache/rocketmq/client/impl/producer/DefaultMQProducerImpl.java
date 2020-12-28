@@ -179,13 +179,14 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         switch (this.serviceState) {
             case CREATE_JUST:
                 this.serviceState = ServiceState.START_FAILED;
-
+                //校验producer的groupName  不能是系统默认的DEFAULT_PRODUCER
                 this.checkConfig();
 
                 if (!this.defaultMQProducer.getProducerGroup().equals(MixAll.CLIENT_INNER_PRODUCER_GROUP)) {
                     this.defaultMQProducer.changeInstanceNameToPID();
                 }
 
+                //实例化mqClient
                 this.mQClientFactory = MQClientManager.getInstance().getOrCreateMQClientInstance(this.defaultMQProducer, rpcHook);
 
                 boolean registerOK = mQClientFactory.registerProducer(this.defaultMQProducer.getProducerGroup(), this);
@@ -219,6 +220,9 @@ public class DefaultMQProducerImpl implements MQProducerInner {
 
         this.mQClientFactory.sendHeartbeatToAllBrokerWithLock();
 
+        /**
+         * 1s清理一次过期请求
+         */
         this.timer.scheduleAtFixedRate(new TimerTask() {
             @Override
             public void run() {
@@ -564,7 +568,12 @@ public class DefaultMQProducerImpl implements MQProducerInner {
             int times = 0;
             String[] brokersSent = new String[timesTotal];
             for (; times < timesTotal; times++) {
+                /**
+                 * 发送失败，重试两次 发给别的broker
+                 */
                 String lastBrokerName = null == mq ? null : mq.getBrokerName();
+                //第一次随机发送到其中一个queue,后面消息从第一次的queue后的开始轮流发送
+                //eg: 假设有 0 1 2 3 四个队列，第一次发送选择了 2，后面的消息发送queue的顺序依次为 3 0 1 2 3 0.....
                 MessageQueue mqSelected = this.selectOneMessageQueue(topicPublishInfo, lastBrokerName);
                 if (mqSelected != null) {
                     mq = mqSelected;
