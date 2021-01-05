@@ -320,6 +320,10 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
     @Override
     public SendResult send(
         Message msg) throws MQClientException, RemotingException, MQBrokerException, InterruptedException {
+        /**
+         * 校验Topic和Body不能为空、校验Topic的长度不能超过127个字符
+         * 消息体不能超过4M
+         */
         Validators.checkMessage(msg, this);
         msg.setTopic(withNamespace(msg.getTopic()));
         return this.defaultMQProducerImpl.send(msg);

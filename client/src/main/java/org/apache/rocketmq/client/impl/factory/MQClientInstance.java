@@ -638,10 +638,12 @@ public class MQClientInstance {
                             }
                         }
                     } else {
+                        //第一次随机选择一个nameServer获取路由信息，后面的请求从这个nameServer后开始按顺序来
                         topicRouteData = this.mQClientAPIImpl.getTopicRouteInfoFromNameServer(topic, 1000 * 3);
                     }
                     if (topicRouteData != null) {
                         TopicRouteData old = this.topicRouteTable.get(topic);
+                        //判断路由信息是否变化
                         boolean changed = topicRouteDataIsChange(old, topicRouteData);
                         if (!changed) {
                             changed = this.isNeedUpdateTopicRouteInfo(topic);
