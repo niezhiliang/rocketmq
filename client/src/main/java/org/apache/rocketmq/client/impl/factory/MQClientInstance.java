@@ -243,7 +243,10 @@ public class MQClientInstance {
                     this.startScheduledTask();
                     // Start pull service
                     this.pullMessageService.start();
-                    // Start rebalance service
+                    /**
+                     * 消息队列重新负载，默认为平均负载
+                     * 20s重新更新一次consumer的消费队列
+                     */
                     this.rebalanceService.start();
                     // Start push service
                     this.defaultMQProducer.getDefaultMQProducerImpl().start(false);
@@ -994,6 +997,7 @@ public class MQClientInstance {
             MQConsumerInner impl = entry.getValue();
             if (impl != null) {
                 try {
+                    //这里
                     impl.doRebalance();
                 } catch (Throwable e) {
                     log.error("doRebalance exception", e);

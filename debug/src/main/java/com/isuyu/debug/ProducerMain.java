@@ -2,8 +2,11 @@ package com.isuyu.debug;
 
 import org.apache.rocketmq.client.exception.MQClientException;
 import org.apache.rocketmq.client.producer.DefaultMQProducer;
+import org.apache.rocketmq.client.producer.MessageQueueSelector;
 import org.apache.rocketmq.common.message.Message;
+import org.apache.rocketmq.common.message.MessageQueue;
 
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -16,7 +19,7 @@ public class ProducerMain {
 
     private static final String PRODUCER_GROUP = "test-group";
 
-    private static final String TOPIC = "simple-topic";
+    private static final String TOPIC = "testMsg";
 
     public static void main(String[] args) throws Exception {
         //初始化发送消息的线程池
@@ -24,7 +27,16 @@ public class ProducerMain {
         producer.setNamesrvAddr(NAMESRV_ADDR);
         producer.start();
 
-        producer.send(new Message(TOPIC,"hello producer".getBytes()));
+        for (int i = 0; i < 1 ; i++) {
+            producer.send(new Message(TOPIC, ("hello producer  " + i ).getBytes() ), new MessageQueueSelector() {
+                @Override
+                public MessageQueue select(List<MessageQueue> mqs, Message msg, Object arg) {
+                    int num = (int) arg;
+                    return mqs.get(mqs.size()-1);
+                }
+            },0);
+        }
+
 
         TimeUnit.SECONDS.sleep(10);
 

@@ -154,19 +154,21 @@ public class PullAPIWrapper {
         final CommunicationMode communicationMode,
         final PullCallback pullCallback
     ) throws MQClientException, RemotingException, MQBrokerException, InterruptedException {
+        //拉取的broker节点
         FindBrokerResult findBrokerResult =
             this.mQClientFactory.findBrokerAddressInSubscribe(mq.getBrokerName(),
                 this.recalculatePullFromWhichNode(mq), false);
+        //如果拿到的broker为空，则重新从nameServer拉取路由信息
         if (null == findBrokerResult) {
             this.mQClientFactory.updateTopicRouteInfoFromNameServer(mq.getTopic());
             findBrokerResult =
                 this.mQClientFactory.findBrokerAddressInSubscribe(mq.getBrokerName(),
                     this.recalculatePullFromWhichNode(mq), false);
         }
-
+        //拿到了broker
         if (findBrokerResult != null) {
             {
-                // check version
+                //broker4.1.0版本以后才支持sql过滤
                 if (!ExpressionType.isTagType(expressionType)
                     && findBrokerResult.getBrokerVersion() < MQVersion.Version.V4_1_0_SNAPSHOT.ordinal()) {
                     throw new MQClientException("The broker[" + mq.getBrokerName() + ", "
@@ -191,12 +193,19 @@ public class PullAPIWrapper {
             requestHeader.setSubscription(subExpression);
             requestHeader.setSubVersion(subVersion);
             requestHeader.setExpressionType(expressionType);
-
+            //broker地址  ip:port
             String brokerAddr = findBrokerResult.getBrokerAddr();
             if (PullSysFlag.hasClassFilterFlag(sysFlagInner)) {
                 brokerAddr = computPullFromWhichFilterServer(mq.getTopic(), brokerAddr);
             }
-
+            /**
+             * 使用长轮询的方式请求Broker,Broker收到请求后，hold住请求，如果没有消息，
+             * 将请求挂起，还有个超时机制，如果15s内都没有新的消息，会给consumer一个响应
+             * ，consumer收到请求后会，处理完成会发起下一次pull请求
+             * broker内部还有一个1ms一次的定时器，定时扫描是否有新消息，有就给consumer响应
+             * DefaultMessageStore.ReputMessageService.run
+             *
+             */
             PullResult pullResult = this.mQClientFactory.getMQClientAPIImpl().pullMessage(
                 brokerAddr,
                 requestHeader,

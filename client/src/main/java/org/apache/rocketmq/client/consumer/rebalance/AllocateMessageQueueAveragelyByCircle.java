@@ -51,10 +51,10 @@ public class AllocateMessageQueueAveragelyByCircle implements AllocateMessageQue
             return result;
         }
 
-        int index = cidAll.indexOf(currentCID);
+        int index = cidAll.indexOf(currentCID);   // 1           0    2
         for (int i = index; i < mqAll.size(); i++) {
-            if (i % cidAll.size() == index) {
-                result.add(mqAll.get(i));
+            if (i % cidAll.size() == index) { //0  1  2 3
+                result.add(mqAll.get(i));   // 1               0  3   2
             }
         }
         return result;

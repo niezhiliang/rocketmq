@@ -214,8 +214,10 @@ public abstract class RebalanceImpl {
     }
 
     public void doRebalance(final boolean isOrder) {
+        //消费者定于的topic 包含系统重试的topic
         Map<String, SubscriptionData> subTable = this.getSubscriptionInner();
         if (subTable != null) {
+            //依次负载consumer监听的每个topic
             for (final Map.Entry<String, SubscriptionData> entry : subTable.entrySet()) {
                 final String topic = entry.getKey();
                 try {
@@ -255,7 +257,9 @@ public abstract class RebalanceImpl {
                 break;
             }
             case CLUSTERING: {
+                //当前topic所有的MessageQueue
                 Set<MessageQueue> mqSet = this.topicSubscribeInfoTable.get(topic);
+                //同一个group中，监听该topic的consumer  ip@port
                 List<String> cidAll = this.mQClientFactory.findConsumerIdList(topic, consumerGroup);
                 if (null == mqSet) {
                     if (!topic.startsWith(MixAll.RETRY_GROUP_TOPIC_PREFIX)) {
@@ -268,16 +272,19 @@ public abstract class RebalanceImpl {
                 }
 
                 if (mqSet != null && cidAll != null) {
+                    //存放topic所有的MessageQueue
                     List<MessageQueue> mqAll = new ArrayList<MessageQueue>();
                     mqAll.addAll(mqSet);
-
+                    //对MessageQueue排序
                     Collections.sort(mqAll);
+                    //同一group监听当前topic的consumer排序
                     Collections.sort(cidAll);
-
+                    //获取负载策略 默认为AllocateMessageQueueAveragely
                     AllocateMessageQueueStrategy strategy = this.allocateMessageQueueStrategy;
 
                     List<MessageQueue> allocateResult = null;
                     try {
+                        //根据负载策略得到消费的MessageQueues
                         allocateResult = strategy.allocate(
                             this.consumerGroup,
                             this.mQClientFactory.getClientId(),
@@ -328,7 +335,7 @@ public abstract class RebalanceImpl {
     private boolean updateProcessQueueTableInRebalance(final String topic, final Set<MessageQueue> mqSet,
         final boolean isOrder) {
         boolean changed = false;
-
+        //
         Iterator<Entry<MessageQueue, ProcessQueue>> it = this.processQueueTable.entrySet().iterator();
         while (it.hasNext()) {
             Entry<MessageQueue, ProcessQueue> next = it.next();
@@ -366,19 +373,23 @@ public abstract class RebalanceImpl {
         List<PullRequest> pullRequestList = new ArrayList<PullRequest>();
         for (MessageQueue mq : mqSet) {
             if (!this.processQueueTable.containsKey(mq)) {
+                //顺序消费，这里会去请求broker锁住当前MessageQueue
                 if (isOrder && !this.lock(mq)) {
                     log.warn("doRebalance, {}, add a new mq failed, {}, because lock failed", consumerGroup, mq);
                     continue;
                 }
-
+                //TODO 移除不正确的offset
                 this.removeDirtyOffset(mq);
                 ProcessQueue pq = new ProcessQueue();
+                //获取MessageQueue新的offset
                 long nextOffset = this.computePullFromWhere(mq);
                 if (nextOffset >= 0) {
+                    //添加MessageQueue到监听的缓存中
                     ProcessQueue pre = this.processQueueTable.putIfAbsent(mq, pq);
                     if (pre != null) {
                         log.info("doRebalance, {}, mq already exists, {}", consumerGroup, mq);
                     } else {
+                        //新建消息拉取的请求
                         log.info("doRebalance, {}, add a new mq, {}", consumerGroup, mq);
                         PullRequest pullRequest = new PullRequest();
                         pullRequest.setConsumerGroup(consumerGroup);
@@ -386,6 +397,7 @@ public abstract class RebalanceImpl {
                         pullRequest.setMessageQueue(mq);
                         pullRequest.setProcessQueue(pq);
                         pullRequestList.add(pullRequest);
+                        //将监听的MessageQueue结果改变返回出去
                         changed = true;
                     }
                 } else {
@@ -393,7 +405,7 @@ public abstract class RebalanceImpl {
                 }
             }
         }
-
+        //将监听的MessageQueue添加到Consumer的阻塞队列中，阻塞队列中有了值，就会开始拉取消息的操作
         this.dispatchPullRequest(pullRequestList);
 
         return changed;
