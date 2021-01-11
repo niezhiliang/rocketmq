@@ -110,9 +110,12 @@ public class AllocateMachineRoomNearby implements AllocateMessageQueueStrategy {
 
         //1.给当前consumer分当前机房的那些MessageQeueue
         String currentMachineRoom = machineRoomResolver.consumerDeployIn(currentCID);
+        //得到当前机房的MessageQueue
         List<MessageQueue> mqInThisMachineRoom = mr2Mq.remove(currentMachineRoom);
+        //得到当前机房所有的Consumer
         List<String> consumerInThisMachineRoom = mr2c.get(currentMachineRoom);
         if (mqInThisMachineRoom != null && !mqInThisMachineRoom.isEmpty()) {
+            //得到当前机房所有MessageQueue和Consumers后根据指定的策略再负载
             allocateResults.addAll(allocateMessageQueueStrategy.allocate(consumerGroup, currentCID, mqInThisMachineRoom, consumerInThisMachineRoom));
         }
 

@@ -74,7 +74,7 @@ public class AllocateMessageQueueConsistentHash implements AllocateMessageQueueS
                 cidAll);
             return result;
         }
-
+        //将所有consumer变成节点 到时候经过hash计算 分布在hash环上
         Collection<ClientNode> cidNodes = new ArrayList<ClientNode>();
         for (String cid : cidAll) {
             cidNodes.add(new ClientNode(cid));
@@ -84,12 +84,15 @@ public class AllocateMessageQueueConsistentHash implements AllocateMessageQueueS
         if (customHashFunction != null) {
             router = new ConsistentHashRouter<ClientNode>(cidNodes, virtualNodeCnt, customHashFunction);
         } else {
+            //默认使用MD5进行Hash计算
             router = new ConsistentHashRouter<ClientNode>(cidNodes, virtualNodeCnt);
         }
 
         List<MessageQueue> results = new ArrayList<MessageQueue>();
         for (MessageQueue mq : mqAll) {
+            //对messageQueue进行hash计算，找到顺时针最近的consumer节点
             ClientNode clientNode = router.routeNode(mq.toString());
+            //判断是否是当前consumer
             if (clientNode != null && currentCID.equals(clientNode.getKey())) {
                 results.add(mq);
             }
