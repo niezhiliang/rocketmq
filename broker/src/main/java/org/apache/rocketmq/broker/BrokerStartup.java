@@ -171,6 +171,7 @@ public class BrokerStartup {
                     brokerConfig.setBrokerId(MixAll.MASTER_ID);
                     break;
                 case SLAVE:
+                    //校验了一下 slave的brokerid必须大于0  0是master
                     if (brokerConfig.getBrokerId() <= 0) {
                         System.out.printf("Slave's brokerId must be > 0");
                         System.exit(-3);
@@ -182,7 +183,7 @@ public class BrokerStartup {
             }
 
             /**
-             * 如果开了dleger,将broker状态设置为异常
+             * 如果开了dleger,将broker状态设置为异常  默认未开启
              */
             if (messageStoreConfig.isEnableDLegerCommitLog()) {
                 brokerConfig.setBrokerId(-1);
@@ -194,7 +195,10 @@ public class BrokerStartup {
             configurator.setContext(lc);
             lc.reset();
             configurator.doConfigure(brokerConfig.getRocketmqHome() + "/conf/logback_broker.xml");
-
+            /**
+             * 打印出brokerConfig、nettyServer、nettyClient的参数
+             * 然后退出
+             */
             if (commandLine.hasOption('p')) {
                 InternalLogger console = InternalLoggerFactory.getLogger(LoggerName.BROKER_CONSOLE_NAME);
                 MixAll.printObjectProperties(console, brokerConfig);
