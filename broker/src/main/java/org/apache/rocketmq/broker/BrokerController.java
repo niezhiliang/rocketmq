@@ -236,7 +236,7 @@ public class BrokerController {
         boolean result = this.topicConfigManager.load();
         //加载consumer的offset
         result = result && this.consumerOffsetManager.load();
-        //TODO 加载订阅的group
+        //加载当前broker所有的订阅者
         result = result && this.subscriptionGroupManager.load();
         //加载consumer的类加载器
         result = result && this.consumerFilterManager.load();
@@ -903,45 +903,52 @@ public class BrokerController {
         }
 
         /**
-         * 启动netty相关线程
+         * 启动netty路由服务,路由consumer和producer的请求
          */
         if (this.remotingServer != null) {
             this.remotingServer.start();
         }
 
+        /**
+         * 快速路由服务
+         * 主要用于扫描生产者和消费者是否还存活
+         */
         if (this.fastRemotingServer != null) {
             this.fastRemotingServer.start();
         }
 
         /**
-         * 启动文件监听，通过对文件进行hash 判断
-         * 新的hash和当前hash是否一致  不一致
+         * 关注文件变更的服务，及时加载最小的ssl证书
+         * 通过对文件进行hash 判断新的hash和当前hash是否一致  不一致
          * 表示文件变更了
          */
         if (this.fileWatchService != null) {
             this.fileWatchService.start();
         }
 
+        //启动broker对外的api
         if (this.brokerOuterAPI != null) {
             this.brokerOuterAPI.start();
         }
 
         /**
-         * TODO 不是很清楚
-         * 通知消息到达 然后写入commitlog
+         * 消息拉去辅助服务，主要看消息是否到达， 处理客户端的拉去请求
+         * 当消息到达，通知PullMessageProcessor处理
          */
         if (this.pullRequestHoldService != null) {
             this.pullRequestHoldService.start();
         }
 
         /**
-         * 启动定时器 每10s清理有问题的Netty通道
+         * 客户端心跳服务
+         * 启动定时器 每10s清理没用的链接
          */
         if (this.clientHousekeepingService != null) {
             this.clientHousekeepingService.start();
         }
 
         /**
+         * 过滤消息服务
          * 启动定时器 每30s 通过shell脚本启动startfsrv.sh
          * 自定义消息过滤服务，如果用系统的tag或者是sql 不需要开启该服务
          */
@@ -950,7 +957,9 @@ public class BrokerController {
         }
 
         /**
+         * 主从数据同步
          * 没开启Dleger 则使用的是系统默认的CommitLog
+         *
          */
         if (!messageStoreConfig.isEnableDLegerCommitLog()) {
             //如果是master 事务消息回调启动 默认6s一次 最多15次
@@ -979,7 +988,7 @@ public class BrokerController {
             }
         }, 1000 * 10, Math.max(10000, Math.min(brokerConfig.getRegisterNameServerPeriod(), 60000)), TimeUnit.MILLISECONDS);
 
-        //空实现
+        //broker状态管理
         if (this.brokerStatsManager != null) {
             this.brokerStatsManager.start();
         }

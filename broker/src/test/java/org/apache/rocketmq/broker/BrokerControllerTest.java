@@ -47,4 +47,19 @@ public class BrokerControllerTest {
     public void destroy() {
         UtilAll.deleteFile(new File(new MessageStoreConfig().getStorePathRootDir()));
     }
+
+    public static void main(String[] args) throws Exception {
+        BrokerConfig brokerConfig = new BrokerConfig();
+        brokerConfig.setBrokerName("broker-a");
+        brokerConfig.setNamesrvAddr("127.0.0.1:9876");
+        BrokerController brokerController = new BrokerController(
+                brokerConfig ,
+                    new NettyServerConfig(),
+                    new NettyClientConfig(),
+                    new MessageStoreConfig());
+
+            assertThat(brokerController.initialize());
+            brokerController.start();
+            //brokerController.shutdown();
+    }
 }

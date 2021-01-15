@@ -29,7 +29,6 @@ public class ProducerMain {
 
         for (int i = 10; i < 12 ; i++) {
             Message message = new Message(TOPIC, ("hello producer  " + i).getBytes(StandardCharsets.UTF_8));
-            message.setDelayTimeLevel(2);
             producer.send(message, new MessageQueueSelector() {
                 @Override
                 public MessageQueue select(List<MessageQueue> mqs, Message msg, Object arg) {

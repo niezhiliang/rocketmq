@@ -1,4 +1,4 @@
-## RocketMQ消费负载策略
+##  RocketMQ消费负载策略
 
 Consumer在拉取消息之前需要对TopicMessage进行负载操作，负载操作由一个定时器来完成单位，`定时间隔默认20s`
 

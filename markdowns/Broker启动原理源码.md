@@ -94,9 +94,9 @@ storePathCommitLog（commitLogd地址）、mappedFileSizeCommitLog（mapperFile�
 **3.BrokerController初始化**
 
 - 加载持久化文件
-  - 通过加载topic.json文件加载当前broker所有的topic（系统和用户创建）
-  - 加载consumerOffset.json文件加载所有consumer的offset
-  - 加载subscriptionGroup.json，加载当前broker所有的订阅者
+  - 通过加载store/config/topic.json文件加载当前broker所有的topic（系统和用户创建）
+  - 加载store/config/consumerOffset.json文件加载所有consumer的offset
+  - 加载store/config/subscriptionGroup.json，加载当前broker所有的订阅者
   - 加载
 - 实例化MessageStore
 - 从MessageStore中获取昨日和今日消息拉去的数量和发送数量
@@ -104,7 +104,7 @@ storePathCommitLog（commitLogd地址）、mappedFileSizeCommitLog（mapperFile�
 - 加载commitlog的mappedFile文件到内存中、加载consumerQueue并放到内存中、加载index文件到内存
 - 根据brokerConfig配置实例化一些线程池
 - 创建一些定时器
-  - 一天执行一次记录broker一天的拉去信息量
+  - 一天执行一次记录broker一天的拉去量
   - 5s执行一次更新consumer的offset值
   - 1s打印一些关于Queue Size的日志  包含 Pull、 Queue、 Transaction
 - nameServerAddress不为空修改内存中的nameServerAddress，如果为空，2分钟向服务器拉取nameServerAddress
@@ -126,3 +126,94 @@ storePathCommitLog（commitLogd地址）、mappedFileSizeCommitLog（mapperFile�
     - 定时起立commitlog中72小时还未消费的消息
     - 检查commitlog是否满了，默认大小1G
 
+- 启动netty相关线程
+- 启动文件监听线程
+- 启动NettyRemotingClient
+- 启动消息到达监听，通知PullMessageProcessor处理
+- 启动定时器，每10s清理有问题的netty通道
+- 同步master的信息到slave
+- 向nameserver注册broker
+- 启动broker向nameserver心跳的定时器，默认30s一次，心跳间隔值只能设置在10s - 60s之间
+
+
+
+### Broker注册方法
+
+```java
+public List<RegisterBrokerResult> registerBrokerAll(
+    final String clusterName,
+    final String brokerAddr,
+    final String brokerName,
+    final long brokerId,
+    final String haServerAddr,
+    final TopicConfigSerializeWrapper topicConfigWrapper,
+    final List<String> filterServerList,
+    final boolean oneway,
+    final int timeoutMills,
+    final boolean compressed) {
+
+    final List<RegisterBrokerResult> registerBrokerResultList = Lists.newArrayList();
+    //所有的nameserver地址
+    List<String> nameServerAddressList = this.remotingClient.getNameServerAddressList();
+    if (nameServerAddressList != null && nameServerAddressList.size() > 0) {
+        /**
+        * 构建请求头
+        * 包含了broker地址 ip:port
+        * broker的id 也就是角色  0 master > 0 slave
+        * brokerName 
+        * broker集群名称
+        * 是否开启压缩
+        */
+        final RegisterBrokerRequestHeader requestHeader = new RegisterBrokerRequestHeader();
+        requestHeader.setBrokerAddr(brokerAddr);
+        requestHeader.setBrokerId(brokerId);
+        requestHeader.setBrokerName(brokerName);
+        requestHeader.setClusterName(clusterName);
+        requestHeader.setHaServerAddr(haServerAddr);
+        requestHeader.setCompressed(compressed);
+
+        /**
+        * 构建请求体
+        * body  当前broker所有的topic信息，名称、读写队列数
+        * 使用门闩依次向各个nameserver注册
+        */
+        RegisterBrokerBody requestBody = new RegisterBrokerBody();
+        requestBody.setTopicConfigSerializeWrapper(topicConfigWrapper);
+        requestBody.setFilterServerList(filterServerList);
+        final byte[] body = requestBody.encode(compressed);
+        final int bodyCrc32 = UtilAll.crc32(body);
+        requestHeader.setBodyCrc32(bodyCrc32);
+        final CountDownLatch countDownLatch = new CountDownLatch(nameServerAddressList.size());
+        for (final String namesrvAddr : nameServerAddressList) {
+            brokerOuterExecutor.execute(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        RegisterBrokerResult result = registerBroker(namesrvAddr,oneway, timeoutMills,requestHeader,body);
+                        if (result != null) {
+                            registerBrokerResultList.add(result);
+                        }
+
+                        log.info("register broker[{}]to name server {} OK", brokerId, namesrvAddr);
+                    } catch (Exception e) {
+                        log.warn("registerBroker Exception, {}", namesrvAddr, e);
+                    } finally {
+                        countDownLatch.countDown();
+                    }
+                }
+            });
+        }
+
+        try {
+            countDownLatch.await(timeoutMills, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+        }
+    }
+
+    return registerBrokerResultList;
+}
+```
+
+**Broker注册和心跳的信息**
+
+<img src="http://java-imgs.oss-cn-hongkong.aliyuncs.com/2021/1/13/20210113162825.png" style="zoom:80%;float:left;" />

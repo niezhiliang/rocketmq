@@ -107,14 +107,17 @@ public class BrokerStartup {
             if (null == commandLine) {
                 System.exit(-1);
             }
-            //初始化broker配置
+            //创建broker配置
             final BrokerConfig brokerConfig = new BrokerConfig();
+            //创建netty服务器配置
             final NettyServerConfig nettyServerConfig = new NettyServerConfig();
+            //创建netty客户端配置
             final NettyClientConfig nettyClientConfig = new NettyClientConfig();
-
+            //设置broker端口
             nettyClientConfig.setUseTLS(Boolean.parseBoolean(System.getProperty(TLS_ENABLE,
                 String.valueOf(TlsSystemConfig.tlsMode == TlsMode.ENFORCING))));
             nettyServerConfig.setListenPort(10911);
+            //消息持久化配置
             final MessageStoreConfig messageStoreConfig = new MessageStoreConfig();
 
             //如果是集群中的Slave,接受消息最大比例为内存的30%
@@ -220,7 +223,7 @@ public class BrokerStartup {
             MixAll.printObjectProperties(log, nettyServerConfig);
             MixAll.printObjectProperties(log, nettyClientConfig);
             MixAll.printObjectProperties(log, messageStoreConfig);
-            //初始化broker controller
+            //实例化BrokerController
             final BrokerController controller = new BrokerController(
                 brokerConfig,
                 nettyServerConfig,
@@ -229,7 +232,7 @@ public class BrokerStartup {
             //防止配置丢失 将配置放到总的配置文件中allConfig
             // remember all configs to prevent discard
             controller.getConfiguration().registerConfig(properties);
-            //broker初始化
+            //BrokerController初始化
             boolean initResult = controller.initialize();
             if (!initResult) {
                 controller.shutdown();
