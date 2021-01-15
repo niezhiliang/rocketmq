@@ -23,7 +23,7 @@ public class OrderConsumer {
         DefaultMQPushConsumer consumer = new DefaultMQPushConsumer(PRODUCER_GROUP);
         consumer.setNamesrvAddr(NAMESRV_ADDR);
         //第一个参数表示：订阅的topic   第二个参数表示消息过滤器：* 表示接收所有信息 一个消费者订阅一个topic
-        consumer.subscribe(TOPIC,"*");
+        consumer.subscribe(TOPIC,"Tag-a");
         //最大消费线程数
         consumer.setConsumeThreadMax(3);
         //最小消费线程数

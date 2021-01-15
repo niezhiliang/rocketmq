@@ -238,7 +238,7 @@ public class BrokerController {
         result = result && this.consumerOffsetManager.load();
         //加载当前broker所有的订阅者
         result = result && this.subscriptionGroupManager.load();
-        //加载consumer的类加载器
+        //加载consumer的过滤
         result = result && this.consumerFilterManager.load();
 
         if (result) {
@@ -918,7 +918,7 @@ public class BrokerController {
         }
 
         /**
-         * 关注文件变更的服务，及时加载最小的ssl证书
+         * 关注文件变更的服务，及时加载最新的ssl证书
          * 通过对文件进行hash 判断新的hash和当前hash是否一致  不一致
          * 表示文件变更了
          */
