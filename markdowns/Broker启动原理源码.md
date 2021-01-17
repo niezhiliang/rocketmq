@@ -111,9 +111,20 @@ storePathCommitLog（commitLogd地址）、mappedFileSizeCommitLog（mapperFile�
   - 加载store/config/subscriptionGroup.json，加载当前broker所有的订阅者
   - 加载store/config/consumerFilter.json，加载consumer的过滤条件
 - 实例化MessageStore
+  - 创建Commitlog（Commitlog/DLedgerCommitLog）
+    - 系统Commitlog如果是同步：创建GroupCommitService   如果异步：创建FlushRealTimeService
+  - 创建刷consumerqueue服务（1s一次）
+  - 创建定时删除过期的mappedFile服务（默认凌晨4点删除72小时未修改过的文件）
+  - 创建删除consumerQueue和index的mappedFile （小于commitlog最小的offset的文件）
+  - 创建存储层内部统计服务
+  - 创建commitlog主从同步的服务
+  - 创建延迟消息监控类，到期自动执行
 - 从MessageStore中获取昨日和今日消息拉去的数量和发送数量
-- 延迟消息加载延迟消息的offset到内存中以及延迟等级对应的延迟时间到内存
-- 加载commitlog的mappedFile文件到内存中、加载consumerQueue并放到内存中、加载index文件到内存
+- 加载commitlog
+  - 延迟消息加载延迟消息的offset到内存中以及延迟等级对应的延迟时间到内存
+  - commitlog的mappedFile文件到内存中
+  - 加载consumerQueue并放到内存中
+  - 加载index文件到内存
 - 根据brokerConfig配置实例化一些线程池
 - 创建一些定时器
   - 一天执行一次记录broker一天的消息拉取量
@@ -661,3 +672,11 @@ public List<RegisterBrokerResult> registerBrokerAll(
 **Broker注册和心跳的信息**
 
 <img src="http://java-imgs.oss-cn-hongkong.aliyuncs.com/2021/1/13/20210113162825.png" style="zoom:80%;float:left;" />
+
+
+
+
+
+我对着代码我画了个简单流程图，将就看一下吧
+
+![](http://java-imgs.oss-cn-hongkong.aliyuncs.com/2021/1/16/%E7%B1%BB%E5%8A%A0%E8%BD%BD%E6%97%B6%E5%BA%8F%E5%9B%BE%20%281%29.png)

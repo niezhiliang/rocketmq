@@ -125,25 +125,30 @@ public class DefaultMessageStore implements MessageStore {
         this.messageStoreConfig = messageStoreConfig;
         this.brokerStatsManager = brokerStatsManager;
         this.allocateMappedFileService = new AllocateMappedFileService(this);
+        //选择对应的commitlog
         if (messageStoreConfig.isEnableDLegerCommitLog()) {
             this.commitLog = new DLedgerCommitLog(this);
         } else {
             this.commitLog = new CommitLog(this);
         }
         this.consumeQueueTable = new ConcurrentHashMap<>(32);
-
+        //刷consumerqueue服务  1s刷一次
         this.flushConsumeQueueService = new FlushConsumeQueueService();
+        //凌晨4点删除72小时内没有变更过的mappedFile文件
         this.cleanCommitLogService = new CleanCommitLogService();
+        //清理offset小于commitlog中最小的offset的consumerqueue和index的mappedFile文件
         this.cleanConsumeQueueService = new CleanConsumeQueueService();
+        //存储层内部统计服务
         this.storeStatsService = new StoreStatsService();
         this.indexService = new IndexService(this);
+        //用于commitlog数据的主备同步
         if (!messageStoreConfig.isEnableDLegerCommitLog()) {
             this.haService = new HAService(this);
         } else {
             this.haService = null;
         }
         this.reputMessageService = new ReputMessageService();
-
+        //监控延迟消息，到时间后执行
         this.scheduleMessageService = new ScheduleMessageService(this);
 
         this.transientStorePool = new TransientStorePool(messageStoreConfig);
@@ -151,9 +156,9 @@ public class DefaultMessageStore implements MessageStore {
         if (messageStoreConfig.isTransientStorePoolEnable()) {
             this.transientStorePool.init();
         }
-
+        //启动创建MappedFile线程
         this.allocateMappedFileService.start();
-
+        //空实现
         this.indexService.start();
 
         this.dispatcherList = new LinkedList<>();
@@ -203,7 +208,7 @@ public class DefaultMessageStore implements MessageStore {
                     new StoreCheckpoint(StorePathConfigHelper.getStoreCheckpoint(this.messageStoreConfig.getStorePathRootDir()));
 
                 this.indexService.load(lastExitOK);
-
+                //覆盖consumerqueue最大的offset
                 this.recover(lastExitOK);
 
                 log.info("load over, and the max phy offset = {}", this.getMaxPhyOffset());
@@ -286,6 +291,9 @@ public class DefaultMessageStore implements MessageStore {
             this.recoverTopicQueueTable();
         }
 
+        /**
+         * 服务高可用
+         */
         if (!messageStoreConfig.isEnableDLegerCommitLog()) {
             this.haService.start();
             this.handleScheduleMessageService(messageStoreConfig.getBrokerRole());
@@ -1649,13 +1657,20 @@ public class DefaultMessageStore implements MessageStore {
             }
         }
 
+        /**
+         * 每天凌晨4点，删除哪些已经满了的并且72小时内没有被编辑过的mappedFile文件
+         */
         private void deleteExpiredFiles() {
             int deleteCount = 0;
+            //72小时
             long fileReservedTime = DefaultMessageStore.this.getMessageStoreConfig().getFileReservedTime();
+            //100 ms
             int deletePhysicFilesInterval = DefaultMessageStore.this.getMessageStoreConfig().getDeleteCommitLogFilesInterval();
+            //120 s
             int destroyMapedFileIntervalForcibly = DefaultMessageStore.this.getMessageStoreConfig().getDestroyMapedFileIntervalForcibly();
-
+            //是否是删除的时间内  默认凌晨4点
             boolean timeup = this.isTimeToDelete();
+            //磁盘是否满了
             boolean spacefull = this.isSpaceToDelete();
             boolean manualDelete = this.manualDeleteFileSeveralTimes > 0;
 
@@ -1664,6 +1679,8 @@ public class DefaultMessageStore implements MessageStore {
                 if (manualDelete)
                     this.manualDeleteFileSeveralTimes--;
 
+                // 立即删除  =  强制删除（true） &&   立即清理（false）
+                //cleanImmediately = true的情况：1.物理内存占比 大于 磁盘预警比例等级90%  2.物理内存达到强制删除条件  > 85%
                 boolean cleanAtOnce = DefaultMessageStore.this.getMessageStoreConfig().isCleanFileForciblyEnable() && this.cleanImmediately;
 
                 log.info("begin to delete before {} hours file. timeup: {} spacefull: {} manualDeleteFileSeveralTimes: {} cleanAtOnce: {}",
@@ -1672,9 +1689,9 @@ public class DefaultMessageStore implements MessageStore {
                     spacefull,
                     manualDeleteFileSeveralTimes,
                     cleanAtOnce);
-
+                //72小时
                 fileReservedTime *= 60 * 60 * 1000;
-
+                //删除72小时内 没有被改过的文件 一次最多删除10个mappedFile
                 deleteCount = DefaultMessageStore.this.commitLog.deleteExpiredFile(fileReservedTime, deletePhysicFilesInterval,
                     destroyMapedFileIntervalForcibly, cleanAtOnce);
                 if (deleteCount > 0) {
@@ -1725,6 +1742,7 @@ public class DefaultMessageStore implements MessageStore {
                     }
 
                     cleanImmediately = true;
+                    //达到强制删除条件  > 85%
                 } else if (physicRatio > diskSpaceCleanForciblyRatio) {
                     cleanImmediately = true;
                 } else {
@@ -1813,9 +1831,15 @@ public class DefaultMessageStore implements MessageStore {
             }
         }
 
+        /**
+         * 删除那些consumerqueue和index的offset小于commitlog中的offset的文件
+         * 因为consumerqueue的文件是基于commitLog来的，commitlog中会定期删除那些
+         * 过期的mappedFile，所以consumerqueue中也需要响应删除
+         */
         private void deleteExpiredFiles() {
+            // 100ms
             int deleteLogicsFilesInterval = DefaultMessageStore.this.getMessageStoreConfig().getDeleteConsumeQueueFilesInterval();
-
+            //获取commitlog中最小的offset
             long minOffset = DefaultMessageStore.this.commitLog.getMinOffset();
             if (minOffset > this.lastPhysicalMinOffset) {
                 this.lastPhysicalMinOffset = minOffset;

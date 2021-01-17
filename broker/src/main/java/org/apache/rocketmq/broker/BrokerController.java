@@ -232,17 +232,26 @@ public class BrokerController {
     }
 
     public boolean initialize() throws CloneNotSupportedException {
-        //加载topic   topic.json
+        //加载topic   topic.json -->TopicConfigManager.java
         boolean result = this.topicConfigManager.load();
-        //加载consumer的offset
+        //加载consumer的offset -->ConsumerOffsetManager.java
         result = result && this.consumerOffsetManager.load();
-        //加载当前broker所有的订阅者
+        //加载当前broker所有的订阅者 -->SubscriptionGroupManager.java
         result = result && this.subscriptionGroupManager.load();
-        //加载consumer的过滤
+        //加载consumer的过滤 --> ConsumerFilterManager.java
         result = result && this.consumerFilterManager.load();
 
         if (result) {
             try {
+                /**
+                 * 创建对应的commitLog
+                 * 创建刷consumerqueue服务 1s一次
+                 * 创建定时删除commitlog的mappedFile文件服务 （凌晨四点删除72小时未编辑的mappedFile 最大删除十个）
+                 * 创建删除小于commitLog最小offset的consumerqueue和index的mappedFile文件
+                 * 创建存储层 内部统计服务
+                 * 创建commitlogz主从同步服务
+                 * 创建延迟消息监控服务 到期自动执行
+                 */
                 this.messageStore =
                     new DefaultMessageStore(this.messageStoreConfig, this.brokerStatsManager, this.messageArrivingListener,
                         this.brokerConfig);
@@ -910,7 +919,7 @@ public class BrokerController {
         }
 
         /**
-         * 快速路由服务
+         * s
          * 主要用于扫描生产者和消费者是否还存活
          */
         if (this.fastRemotingServer != null) {
