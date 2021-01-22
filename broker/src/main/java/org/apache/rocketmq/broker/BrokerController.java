@@ -98,6 +98,7 @@ import org.apache.rocketmq.remoting.netty.RequestTask;
 import org.apache.rocketmq.remoting.netty.TlsSystemConfig;
 import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 import org.apache.rocketmq.srvutil.FileWatchService;
+import org.apache.rocketmq.store.ConsumeQueue;
 import org.apache.rocketmq.store.DefaultMessageStore;
 import org.apache.rocketmq.store.MessageArrivingListener;
 import org.apache.rocketmq.store.MessageStore;
@@ -271,7 +272,15 @@ public class BrokerController {
                 log.error("Failed to initialize", e);
             }
         }
-        //加载commitlog内容
+        //加载commitlog内容  ConsumeQueue 刷盘时间点
+        /**
+         * lod commitlog  --> MappedFileQueue CopyOnWriteArrayList<MappedFile> mappedFiles;
+         *                                          topic                  queueId
+         * load consumer queue  -->   ConcurrentMap<String, ConcurrentMap<Integer, ConsumeQueue>> consumeQueueTable;
+         * storeCheckpoint  记录commitlog  consumer queue  index 最近的输盘时间点，其中只用该文件的前 24个字节，结构图：https://segmentfault.com/img/bVbpQoU?w=486&h=55
+         * load index --> IndexService.ArrayList<IndexFile> indexFileList
+         *
+         */
         result = result && this.messageStore.load();
 
         /**
@@ -482,7 +491,7 @@ public class BrokerController {
                     }, 1000 * 10, 1000 * 60, TimeUnit.MILLISECONDS);
                 }
             }
-
+            //注册一个监听器，去重新加载ssl证书
             if (TlsSystemConfig.tlsMode != TlsMode.DISABLED) {
                 // Register a listener to reload SslContext
                 try {
@@ -901,9 +910,11 @@ public class BrokerController {
 
     public void start() throws Exception {
         /**
-         * 1.启动刷盘线程
-         * 2.创建store文件夹
-         * 3.创建一些定时器
+         * 1.启动刷盘线程 如果是同步刷盘 启动GroupCommitService
+         * 异步启动FlushRealTimeService
+         * 2.服务高可用，进行commitlog数据的主从同步
+         * 3.创建store文件夹
+         * 4.创建一些定时器
          *  1.定时清理commitlog中72小时还未消费的消息
          *  2.检查commitlog是否满了 默认大小1G
          */
@@ -919,7 +930,7 @@ public class BrokerController {
         }
 
         /**
-         * s
+         *
          * 主要用于扫描生产者和消费者是否还存活
          */
         if (this.fastRemotingServer != null) {

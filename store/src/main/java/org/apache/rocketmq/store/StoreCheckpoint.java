@@ -27,6 +27,11 @@ import org.apache.rocketmq.common.constant.LoggerName;
 import org.apache.rocketmq.logging.InternalLogger;
 import org.apache.rocketmq.logging.InternalLoggerFactory;
 
+/**
+ * 记录 CommitLog，ConsumeQueue，IndexFile
+ * 的刷盘时间点，文件固定长度为 4k，其中只用该文件的前 24个字节，存储格式如下
+ * https://segmentfault.com/img/bVbpQoU?w=486&h=55
+ */
 public class StoreCheckpoint {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
     private final RandomAccessFile randomAccessFile;

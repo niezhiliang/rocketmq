@@ -204,6 +204,7 @@ public class DefaultMessageStore implements MessageStore {
             result = result && this.loadConsumeQueue();
 
             if (result) {
+                //读取commitlog 和 consumer queue index的刷盘时间点
                 this.storeCheckpoint =
                     new StoreCheckpoint(StorePathConfigHelper.getStoreCheckpoint(this.messageStoreConfig.getStorePathRootDir()));
 
@@ -292,7 +293,7 @@ public class DefaultMessageStore implements MessageStore {
         }
 
         /**
-         * 服务高可用
+         * 服务高可用，进行commitlog数据的主从同步
          */
         if (!messageStoreConfig.isEnableDLegerCommitLog()) {
             this.haService.start();
@@ -303,11 +304,11 @@ public class DefaultMessageStore implements MessageStore {
          */
         this.flushConsumeQueueService.start();
         /**
-         * 启动刷盘线程
+         * 启动刷盘线程，如果是同步刷盘 启动GroupCommitService
+         * 异步启动FlushRealTimeService
          */
         this.commitLog.start();
         /**
-         * TODO 这里还要慢慢啃，看的有点迷
          * 启动storeStats线程
          * 主要就是抽样 判断消息体是否大于600 大于移除第一个
          */

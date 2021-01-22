@@ -106,13 +106,20 @@ storePathCommitLog（commitLogd地址）、mappedFileSizeCommitLog（mapperFile�
 **3.BrokerController初始化**
 
 - 加载持久化配置文件
-  - 通过加载store/config/topic.json文件加载当前broker所有的topic（系统和用户创建）
-  - 加载store/config/consumerOffset.json文件加载所有consumer的offset
-  - 加载store/config/subscriptionGroup.json，加载当前broker所有的订阅者
-  - 加载store/config/consumerFilter.json，加载consumer的过滤条件
+  - 通过加载store/config/topic.json文件加载当前broker所有的topic（系统和用户创建），然后包装成了`TopicConfigSerializeWrapper`，最后存到`TopicConfigManager的topicConfigTable`中
+
+- 加载store/config/consumerOffset.json文件加载所有consumer的offset，最终解析成了`ConsumerOffsetManager`
+
+- 加载store/config/subscriptionGroup.json，加载当前broker所有的订阅者,最终解析成了`SubscriptionGroupManager`
+
+- 加载store/config/consumerFilter.json，加载consumer的过滤条件，最终解析成了`ConsumerFilterManager`
+
 - 实例化MessageStore
+  - 创建消息到达监听器 --> `NotifyMessageArrivingListener`
   - 创建Commitlog（Commitlog/DLedgerCommitLog）
-    - 系统Commitlog如果是同步：创建GroupCommitService   如果异步：创建FlushRealTimeService
+    - 系统Commitlog如果是同步：创建`GroupCommitService`   如果异步：创建`FlushRealTimeService`
+    - 设置消息追加的回调  --> `DefaultAppendMessageCallback`
+    - 选择添加消息时锁的方式：4.0之前默认使用`ReentrantLock`，现在默认都是使用自旋锁
   - 创建刷consumerqueue服务（1s一次）
   - 创建定时删除过期的mappedFile服务（默认凌晨4点删除72小时未修改过的文件）
   - 创建删除consumerQueue和index的mappedFile （小于commitlog最小的offset的文件）
@@ -121,9 +128,9 @@ storePathCommitLog（commitLogd地址）、mappedFileSizeCommitLog（mapperFile�
   - 创建延迟消息监控类，到期自动执行
 - 从MessageStore中获取昨日和今日消息拉去的数量和发送数量
 - 加载commitlog
-  - 延迟消息加载延迟消息的offset到内存中以及延迟等级对应的延迟时间到内存
-  - commitlog的mappedFile文件到内存中
-  - 加载consumerQueue并放到内存中
+  - 延迟消息加载延迟消息的offset以及延迟等级对应的延迟时间到内存  
+  - commitlog的mappedFile文件到内存中 --> MappedFileQueue.mappedFiles<CopyOnWriteArrayList<MappedFile>>
+  - 加载consumerQueue并放到内存中  --> DefaultMessageStore.consumeQueueTable<ConcurrentMap<String/* topic */, ConcurrentMap<Integer/* queueId */, ConsumeQueue>>>
   - 加载index文件到内存
 - 根据brokerConfig配置实例化一些线程池
 - 创建一些定时器
@@ -134,7 +141,7 @@ storePathCommitLog（commitLogd地址）、mappedFileSizeCommitLog（mapperFile�
 - 如果没开Dleger（主从自动切换功能） 如果Broker是master打印出master和slave之间的offset差
 - 初始化事务消息的处理Service 和消息状态回查的Service
 - 初始化访问控制列表（acl权限控制）
-- 初始化钩子？？？？
+- 初始化RpcHooks
 
 ```java
 public boolean initialize() throws CloneNotSupportedException {
@@ -168,7 +175,14 @@ public boolean initialize() throws CloneNotSupportedException {
             log.error("Failed to initialize", e);
         }
     }
-    //加载commitlog内容
+    //加载commitlog内容  ConsumeQueue 刷盘时间点
+    /**
+     * lod commitlog  --> MappedFileQueue CopyOnWriteArrayList<MappedFile> mappedFiles;
+     *                                          topic                  queueId
+     * load consumer queue  -->   ConcurrentMap<String, ConcurrentMap<Integer, ConsumeQueue>> consumeQueueTable;
+     * storeCheckpoint  记录commitlog  consumer queue  index 最近的输盘时间点，其中只用该文件的前 24个字节，结构图：	https://segmentfault.com/img/bVbpQoU?w=486&h=55
+     * load index --> IndexService.ArrayList<IndexFile> indexFileList
+     */
     result = result && this.messageStore.load();
 
     /**
@@ -482,9 +496,11 @@ Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
 ```java
 public void start() throws Exception {
     /**
-     * 1.启动刷盘线程
-     * 2.创建store文件夹
-     * 3.创建一些定时器
+     * 1.启动刷盘线程 如果是同步刷盘 启动GroupCommitService
+     * 异步启动FlushRealTimeService
+     * 2.服务高可用，进行commitlog数据的主从同步
+     * 3.创建store文件夹
+     * 4.创建一些定时器
      *  1.定时清理commitlog中72小时还未消费的消息
      *  2.检查commitlog是否满了 默认大小1G
      */
@@ -675,8 +691,6 @@ public List<RegisterBrokerResult> registerBrokerAll(
 
 
 
-
-
-我对着代码我画了个简单流程图，将就看一下吧
+我对着代码我画了个简单流程图，将就看一下吧 
 
 ![](http://java-imgs.oss-cn-hongkong.aliyuncs.com/2021/1/16/%E7%B1%BB%E5%8A%A0%E8%BD%BD%E6%97%B6%E5%BA%8F%E5%9B%BE%20%281%29.png)

@@ -227,11 +227,12 @@ public class MQClientInstance {
             switch (this.serviceState) {
                 case CREATE_JUST:
                     this.serviceState = ServiceState.START_FAILED;
-                    // If not specified,looking address from name server
+                    // 如果nameserver地址为空，会去`http:// + WS_DOMAIN_NAME + ":8080/rocketmq/" + WS_DOMAIN_SUBGROUP`获取，
+                    // WS_DOMAIN_NAME由配置参数rocketmq.namesrv.domain设置，WS_DOMAIN_SUBG由配置参数rocketmq.namesrv.domain.subgroup设置
                     if (null == this.clientConfig.getNamesrvAddr()) {
                         this.mQClientAPIImpl.fetchNameServerAddr();
                     }
-                    // Start request-response channel
+                    // 开启请求和响应通道
                     this.mQClientAPIImpl.start();
                     // Start various schedule tasks
                     /**
@@ -241,14 +242,14 @@ public class MQClientInstance {
                      * 4.定时1分钟，动态调整线程池线程数量
                      */
                     this.startScheduledTask();
-                    // Start pull service
+                    // 启动消息拉去服务 如果有是producer 该服务没有consumer
                     this.pullMessageService.start();
                     /**
                      * 消息队列重新负载，默认为平均负载
                      * 20s重新更新一次consumer的消费队列
                      */
                     this.rebalanceService.start();
-                    // Start push service
+                    // 启动producer消息推送服务
                     this.defaultMQProducer.getDefaultMQProducerImpl().start(false);
                     log.info("the client factory [{}] start OK", this.clientId);
                     this.serviceState = ServiceState.RUNNING;
@@ -648,6 +649,7 @@ public class MQClientInstance {
                         TopicRouteData old = this.topicRouteTable.get(topic);
                         //判断路由信息是否变化
                         boolean changed = topicRouteDataIsChange(old, topicRouteData);
+                        //未修改，修改
                         if (!changed) {
                             changed = this.isNeedUpdateTopicRouteInfo(topic);
                         } else {

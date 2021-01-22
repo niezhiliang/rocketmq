@@ -23,24 +23,13 @@ public class ProducerMain {
 
     public static void main(String[] args) throws Exception {
         //初始化发送消息的线程池
-        DefaultMQProducer producer = new DefaultMQProducer(PRODUCER_GROUP);
-        producer.setNamesrvAddr(NAMESRV_ADDR);
+        DefaultMQProducer producer = new DefaultMQProducer("test-group");
+        producer.setNamesrvAddr("localhost:9876");
+        //这一步还没拿到broker地址
         producer.start();
-
-        for (int i = 10; i < 12 ; i++) {
-            Message message = new Message(TOPIC, ("hello producer  " + i).getBytes(StandardCharsets.UTF_8));
-            producer.send(message, new MessageQueueSelector() {
-                @Override
-                public MessageQueue select(List<MessageQueue> mqs, Message msg, Object arg) {
-                    int num = (int) arg;
-                    return mqs.get(mqs.size()-1);
-                }
-            },0);
-        }
-
-
-        TimeUnit.SECONDS.sleep(10);
-
+        //消息发送
+        producer.send(new Message("testMsg","hello broker! I am producer".getBytes()));
+        TimeUnit.SECONDS.sleep(3);
         producer.shutdown();
 
     }

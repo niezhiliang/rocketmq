@@ -178,17 +178,19 @@ public class DefaultMQProducerImpl implements MQProducerInner {
     public void start(final boolean startFactory) throws MQClientException {
         switch (this.serviceState) {
             case CREATE_JUST:
+                //默认服务启动状态为失败
                 this.serviceState = ServiceState.START_FAILED;
-                //校验producer的groupName  不能是系统默认的DEFAULT_PRODUCER
+                //验证group不能为空 字符长度最多255 是否符合给定的正则条件"^[%|a-zA-Z0-9_-]+$"
+                // 不能为默认的组DEFAULT_PRODUCER
                 this.checkConfig();
-
+                //修改示例名称为当前进程ID
                 if (!this.defaultMQProducer.getProducerGroup().equals(MixAll.CLIENT_INNER_PRODUCER_GROUP)) {
                     this.defaultMQProducer.changeInstanceNameToPID();
                 }
 
-                //实例化mqClient
+                //实例化mqClient  将当前客户端放到MQClientManager的ConcurrentMap<String/* clientId */, MQClientInstance> factoryTable，有直接取出，没有就添加并返回
                 this.mQClientFactory = MQClientManager.getInstance().getOrCreateMQClientInstance(this.defaultMQProducer, rpcHook);
-
+                //将producer注册到MQClientInstance的ConcurrentMap<String/* group */, MQProducerInner> producerTable中
                 boolean registerOK = mQClientFactory.registerProducer(this.defaultMQProducer.getProducerGroup(), this);
                 if (!registerOK) {
                     this.serviceState = ServiceState.CREATE_JUST;
@@ -196,9 +198,9 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                         + "] has been created before, specify another name please." + FAQUrl.suggestTodo(FAQUrl.GROUP_NAME_DUPLICATE_URL),
                         null);
                 }
-
+                //拿到自动创建topic的队列TBW102，如果设置了isAutoCreateTopicEnabl=true会自动创建当前topic
                 this.topicPublishInfoTable.put(this.defaultMQProducer.getCreateTopicKey(), new TopicPublishInfo());
-
+                //如果是producer启动，不启动客户端
                 if (startFactory) {
                     mQClientFactory.start();
                 }
@@ -217,7 +219,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
             default:
                 break;
         }
-
+        //向所有broker发送心跳包
         this.mQClientFactory.sendHeartbeatToAllBrokerWithLock();
 
         /**
@@ -235,6 +237,12 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         }, 1000 * 3, 1000);
     }
 
+    /**
+     * 配置验证
+     * 1.group不能为空 字符长度最多255 是否符合给定的正则条件"^[%|a-zA-Z0-9_-]+$" 不能为默认的组DEFAULT_PRODUCER
+     * 2.
+     * @throws MQClientException
+     */
     private void checkConfig() throws MQClientException {
         Validators.checkGroup(this.defaultMQProducer.getProducerGroup());
 
@@ -769,6 +777,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
 
                 int sysFlag = 0;
                 boolean msgBodyCompressed = false;
+                //尝试压缩消息
                 if (this.tryToCompressMessage(msg)) {
                     sysFlag |= MessageSysFlag.COMPRESSED_FLAG;
                     msgBodyCompressed = true;
@@ -790,7 +799,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                     checkForbiddenContext.setUnitMode(this.isUnitMode());
                     this.executeCheckForbiddenHook(checkForbiddenContext);
                 }
-
+                //消息发送前的钩子，如果有先执行
                 if (this.hasSendMessageHook()) {
                     context = new SendMessageContext();
                     context.setProducer(this);
@@ -899,7 +908,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                         assert false;
                         break;
                 }
-
+                ////消息发送后的钩子，如果有先执行
                 if (this.hasSendMessageHook()) {
                     context.setSendResult(sendResult);
                     this.executeSendMessageHookAfter(context);
@@ -1136,18 +1145,27 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         long beginStartTime = System.currentTimeMillis();
         this.makeSureStateOK();
         Validators.checkMessage(msg, this.defaultMQProducer);
-
+        /**
+         * 根据topic获取路由信息
+         * 先从内存中去，没有从nameserver获取
+         */
         TopicPublishInfo topicPublishInfo = this.tryToFindTopicPublishInfo(msg.getTopic());
         if (topicPublishInfo != null && topicPublishInfo.ok()) {
             MessageQueue mq = null;
             try {
+                /**
+                 *
+                 */
                 List<MessageQueue> messageQueueList =
                     mQClientFactory.getMQAdminImpl().parsePublishMessageQueues(topicPublishInfo.getMessageQueueList());
                 Message userMessage = MessageAccessor.cloneMessage(msg);
                 String userTopic = NamespaceUtil.withoutNamespace(userMessage.getTopic(), mQClientFactory.getClientConfig().getNamespace());
                 userMessage.setTopic(userTopic);
-
-                mq = mQClientFactory.getClientConfig().queueWithNamespace(selector.select(messageQueueList, userMessage, arg));
+                //获取对应的queue 然后
+                mq = mQClientFactory.getClientConfig().queueWithNamespace(
+                        //自定义的queue选择器
+                        selector.select(messageQueueList, userMessage, arg)
+                );
             } catch (Throwable e) {
                 throw new MQClientException("select message queue throwed exception.", e);
             }
@@ -1157,6 +1175,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                 throw new RemotingTooMuchRequestException("sendSelectImpl call timeout");
             }
             if (mq != null) {
+                //真正的发送方法
                 return this.sendKernelImpl(msg, mq, communicationMode, sendCallback, null, timeout - costTime);
             } else {
                 throw new MQClientException("select message queue return null.", null);
