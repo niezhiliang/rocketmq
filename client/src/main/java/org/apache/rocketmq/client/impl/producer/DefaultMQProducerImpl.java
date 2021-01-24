@@ -561,15 +561,6 @@ public class DefaultMQProducerImpl implements MQProducerInner {
      * 2.如果开了消息发送失败重试机制，同步消息失败会重试两次，并且发送的broker会优先选择其它的broker
      * 3.从路由信息中第一次随机获取其中一个queue（算法和选nameserver一直）,拿到queue的broker，拿到broker的master节点
      * 4.调用netty,发起发送消息的请求
-     * @param msg
-     * @param communicationMode
-     * @param sendCallback
-     * @param timeout
-     * @return
-     * @throws MQClientException
-     * @throws RemotingException
-     * @throws MQBrokerException
-     * @throws InterruptedException
      */
     private SendResult sendDefaultImpl(
         Message msg,
@@ -590,16 +581,19 @@ public class DefaultMQProducerImpl implements MQProducerInner {
             MessageQueue mq = null;
             Exception exception = null;
             SendResult sendResult = null;
-            //同步发送失败重试两次  异步发送和反向消息只发送一次
+            //同步发送失败重试两次  异步发送和单向发送失败不重试
             int timesTotal = communicationMode == CommunicationMode.SYNC ? 1 + this.defaultMQProducer.getRetryTimesWhenSendFailed() : 1;
             int times = 0;
             String[] brokersSent = new String[timesTotal];
             for (; times < timesTotal; times++) {
                 /**
+                 * 记录发送失败的broker
                  * 发送失败，重试两次 发给别的broker
+                 *
                  */
                 String lastBrokerName = null == mq ? null : mq.getBrokerName();
-                //第一次随机发送到其中一个queue,后面消息从第一次的queue后的开始轮流发送
+                //第一次随机发送到其中一个queue,后面消息从第一次的queue后的开始轮流发送，失败重投时lastBrokerName为上一次
+                //投递的broker，下一次重试会优先选择别的brokre
                 //eg: 假设有 0 1 2 3 四个队列，第一次发送选择了 2，后面的消息发送queue的顺序依次为 3 0 1 2 3 0.....
                 MessageQueue mqSelected = this.selectOneMessageQueue(topicPublishInfo, lastBrokerName);
                 if (mqSelected != null) {
@@ -607,11 +601,13 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                     brokersSent[times] = mq.getBrokerName();
                     try {
                         beginTimestampPrev = System.currentTimeMillis();
+                        //如果重试，重新设置topic的namespace
                         if (times > 0) {
                             //Reset topic with namespace during resend.
                             msg.setTopic(this.defaultMQProducer.withNamespace(msg.getTopic()));
                         }
                         long costTime = beginTimestampPrev - beginTimestampFirst;
+                        //消息超时
                         if (timeout < costTime) {
                             callTimeout = true;
                             break;
@@ -715,7 +711,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
 
             throw mqClientException;
         }
-
+        //验证nameserver是不是为空 空报异常
         validateNameServerSetting();
 
         throw new MQClientException("No route info of this topic: " + msg.getTopic() + FAQUrl.suggestTodo(FAQUrl.NO_TOPIC_ROUTE_INFO),
@@ -908,7 +904,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                         assert false;
                         break;
                 }
-                ////消息发送后的钩子，如果有先执行
+                //消息发送后的钩子，如果有先执行
                 if (this.hasSendMessageHook()) {
                     context.setSendResult(sendResult);
                     this.executeSendMessageHookAfter(context);
@@ -1339,6 +1335,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
      */
     public SendResult send(
         Message msg) throws MQClientException, RemotingException, MQBrokerException, InterruptedException {
+        //超时默认3s
         return send(msg, this.defaultMQProducer.getSendMsgTimeout());
     }
 
