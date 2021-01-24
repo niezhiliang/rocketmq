@@ -86,7 +86,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
                                                                   RemotingCommand request) throws RemotingCommandException {
         final SendMessageContext mqtraceContext;
         switch (request.getCode()) {
-            //TODO consumer退回的消息
+            //consumer退回的消息 如果重新消费次数超过最大限制16次 则放入死信队列
             case RequestCode.CONSUMER_SEND_MSG_BACK:
                 return this.asyncConsumerSendMsgBack(ctx, request);
             default:
