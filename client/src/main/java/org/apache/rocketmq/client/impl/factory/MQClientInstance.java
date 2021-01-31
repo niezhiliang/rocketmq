@@ -225,6 +225,7 @@ public class MQClientInstance {
 
         synchronized (this) {
             switch (this.serviceState) {
+                //默认状态
                 case CREATE_JUST:
                     this.serviceState = ServiceState.START_FAILED;
                     // 如果nameserver地址为空，会去`http:// + WS_DOMAIN_NAME + ":8080/rocketmq/" + WS_DOMAIN_SUBGROUP`获取，
@@ -242,7 +243,7 @@ public class MQClientInstance {
                      * 4.定时1分钟，动态调整线程池线程数量
                      */
                     this.startScheduledTask();
-                    // 启动消息拉去服务 如果有是producer 该服务没有consumer
+                    // 启动消息拉去服务
                     this.pullMessageService.start();
                     /**
                      * 消息队列重新负载，默认为平均负载
@@ -550,6 +551,10 @@ public class MQClientInstance {
         return false;
     }
 
+    /**
+     * 给所有的broker集群的master发送心跳包，broker会返回一个心跳版本，
+     * 然后存到内存中
+     */
     private void sendHeartbeatToAllBroker() {
         final HeartbeatData heartbeatData = this.prepareHeartbeatData();
         final boolean producerEmpty = heartbeatData.getProducerDataSet().isEmpty();
@@ -560,28 +565,39 @@ public class MQClientInstance {
         }
 
         if (!this.brokerAddrTable.isEmpty()) {
+            //记录心跳次数
             long times = this.sendHeartbeatTimesTotal.getAndIncrement();
+            //获取所有broker地址
             Iterator<Entry<String, HashMap<Long, String>>> it = this.brokerAddrTable.entrySet().iterator();
             while (it.hasNext()) {
                 Entry<String, HashMap<Long, String>> entry = it.next();
+                //broker的名称
                 String brokerName = entry.getKey();
+                //某个broker所有节点
                 HashMap<Long, String> oneTable = entry.getValue();
                 if (oneTable != null) {
                     for (Map.Entry<Long, String> entry1 : oneTable.entrySet()) {
+                        //broker的角色 0为master 1为slave
                         Long id = entry1.getKey();
+                        //broker地址
                         String addr = entry1.getValue();
                         if (addr != null) {
                             if (consumerEmpty) {
+                                //如果不是master
                                 if (id != MixAll.MASTER_ID)
                                     continue;
                             }
 
                             try {
+                                //给broker发送心跳包，返回心跳的版本号
                                 int version = this.mQClientAPIImpl.sendHearbeat(addr, heartbeatData, 3000);
+                                //如果是第一次心跳
                                 if (!this.brokerVersionTable.containsKey(brokerName)) {
                                     this.brokerVersionTable.put(brokerName, new HashMap<String, Integer>(4));
                                 }
+                                //将版本号存到内存中
                                 this.brokerVersionTable.get(brokerName).put(addr, version);
+                                //每20次打印一次日志和心跳包信息
                                 if (times % 20 == 0) {
                                     log.info("send heart beat to broker[{} {} {}] success", brokerName, id, addr);
                                     log.info(heartbeatData.toString());
