@@ -31,17 +31,17 @@ public class ProducerMain {
         producer.start();
         //消息发送
         producer.send(new Message("testMsg","hello broker! I am producer".getBytes()));
-//        producer.send(new Message("testMsg", "hello broker! I am producer".getBytes()), new SendCallback() {
-//            @Override
-//            public void onSuccess(SendResult sendResult) {
-//                System.out.println(sendResult);
-//            }
-//
-//            @Override
-//            public void onException(Throwable e) {
-//
-//            }
-//        });
+        producer.send(new Message("testMsg", "hello broker! I am producer".getBytes()), new SendCallback() {
+            @Override
+            public void onSuccess(SendResult sendResult) {
+                System.out.println(sendResult);
+            }
+
+            @Override
+            public void onException(Throwable e) {
+
+            }
+        });
         //producer.sendOneway(new Message("testMsg","hello broker! I am producer".getBytes()));
         TimeUnit.SECONDS.sleep(3);
         producer.shutdown();

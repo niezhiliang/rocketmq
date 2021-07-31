@@ -388,12 +388,12 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
                 log.info("the message queue not be able to consume, because it's dropped. group={} {}", ConsumeMessageConcurrentlyService.this.consumerGroup, this.messageQueue);
                 return;
             }
-
+            //启动时设置的回调函数MessageListener
             MessageListenerConcurrently listener = ConsumeMessageConcurrentlyService.this.messageListener;
             ConsumeConcurrentlyContext context = new ConsumeConcurrentlyContext(messageQueue);
             ConsumeConcurrentlyStatus status = null;
             defaultMQPushConsumerImpl.resetRetryAndNamespace(msgs, defaultMQPushConsumer.getConsumerGroup());
-
+            //消息消费前置钩子函数执行
             ConsumeMessageContext consumeMessageContext = null;
             if (ConsumeMessageConcurrentlyService.this.defaultMQPushConsumerImpl.hasHook()) {
                 consumeMessageContext = new ConsumeMessageContext();
@@ -412,10 +412,10 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
             try {
                 if (msgs != null && !msgs.isEmpty()) {
                     for (MessageExt msg : msgs) {
-                        MessageAccessor.setConsumeStartTimeStamp(msg, String.valueOf(System.currentTimeMillis()));
+                        MessageAccessor.setConsumeStartTimeStamp(msg, String.valueOf(System.currentTimeMillis()));//设置每条消息消费时间
                     }
                 }
-                status = listener.consumeMessage(Collections.unmodifiableList(msgs), context);
+                status = listener.consumeMessage(Collections.unmodifiableList(msgs), context);//调用回调函数进行消息消费，并返回消费状态
             } catch (Throwable e) {
                 log.warn("consumeMessage exception: {} Group: {} Msgs: {} MQ: {}",
                     RemotingHelper.exceptionSimpleDesc(e),
@@ -430,7 +430,7 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
                     returnType = ConsumeReturnType.EXCEPTION;
                 } else {
                     returnType = ConsumeReturnType.RETURNNULL;
-                }
+                }//消息消费超过60s会将消息状态改为超时
             } else if (consumeRT >= defaultMQPushConsumer.getConsumeTimeout() * 60 * 1000) {
                 returnType = ConsumeReturnType.TIME_OUT;
             } else if (ConsumeConcurrentlyStatus.RECONSUME_LATER == status) {
@@ -450,7 +450,7 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
                     messageQueue);
                 status = ConsumeConcurrentlyStatus.RECONSUME_LATER;
             }
-
+            //钩子的后置执行
             if (ConsumeMessageConcurrentlyService.this.defaultMQPushConsumerImpl.hasHook()) {
                 consumeMessageContext.setStatus(status.toString());
                 consumeMessageContext.setSuccess(ConsumeConcurrentlyStatus.CONSUME_SUCCESS == status);
