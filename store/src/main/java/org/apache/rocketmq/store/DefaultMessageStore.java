@@ -242,15 +242,14 @@ public class DefaultMessageStore implements MessageStore {
         lockFile.getChannel().force(true);
         {
             /**
-             * 1. Make sure the fast-forward messages to be truncated during the recovering according to the max physical offset of the commitlog;
-             * 根据commitlog的最大物理偏移量，确定恢复过程中要截断的快进消息
-             * 2. DLedger committedPos may be missing, so the maxPhysicalPosInLogicQueue maybe bigger that maxOffset returned by DLedgerCommitLog, just let it go;
-             *  通过这些consumer queue计算offset
-             * 3. Calculate the reput offset according to the consume queue;
-             *  在commitlog启动之前，确定落后的消息已经被派遣了，尤其是Broker那些会自动改变的角色
-             * 4. Make sure the fall-behind messages to be dispatched before starting the commitlog, especially when the broker role are automatically changed.
+             * 1. 根据commitlog的最大物理偏移量，确定恢复过程中要截断的快进消息
+             * 2. DLedgercommitedPos 可能丢失，所以 maxPhysicalPosInLogicQueue 可能比 DLedgerCommitLog 返回的 maxOffset 大，就让它过去吧
+             * 3. 通过这些consumer queue计算offset
+             * 4. 在commitlog启动之前，确定落后的消息已经被派遣了，尤其是Broker那些会自动改变的角色
              */
+            //最小的commitLog偏移量
             long maxPhysicalPosInLogicQueue = commitLog.getMinOffset();
+            //将maxPhysicalPosInLogicQueue设置为所有consumequeueTopic的queue最大的那个offset
             for (ConcurrentMap<Integer, ConsumeQueue> maps : this.consumeQueueTable.values()) {
                 for (ConsumeQueue logic : maps.values()) {
                     if (logic.getMaxPhysicOffset() > maxPhysicalPosInLogicQueue) {
@@ -260,22 +259,20 @@ public class DefaultMessageStore implements MessageStore {
             }
             if (maxPhysicalPosInLogicQueue < 0) {
                 maxPhysicalPosInLogicQueue = 0;
-            }
+            }//如果最大物理偏移量小于commitlog的最小偏移量 修改当前最大的物理偏移量
             if (maxPhysicalPosInLogicQueue < this.commitLog.getMinOffset()) {
                 maxPhysicalPosInLogicQueue = this.commitLog.getMinOffset();
                 /**
-                 * This happens in following conditions:
-                 * 1. If someone removes all the consumequeue files or the disk get damaged.
-                 * 2. Launch a new broker, and copy the commitlog from other brokers.
-                 *
-                 * All the conditions has the same in common that the maxPhysicalPosInLogicQueue should be 0.
-                 * If the maxPhysicalPosInLogicQueue is gt 0, there maybe something wrong.
+                 * 触发这种情况的条件如下：
+                 * 1. 如果有人删除了所有消耗队列文件或磁盘损坏
+                 * 2. 启动一个新的Broker，并从其他Broker复制commitlog
+                 * 所有条件都有一个共同点，即 maxPhysicalPosInLogicQueue 应为 0，如果 maxPhysicalPosInLogicQueue 为大于0，则可能有问题
                  */
                 log.warn("[TooSmallCqOffset] maxPhysicalPosInLogicQueue={} clMinOffset={}", maxPhysicalPosInLogicQueue, this.commitLog.getMinOffset());
             }
             log.info("[SetReputOffset] maxPhysicalPosInLogicQueue={} clMinOffset={} clMaxOffset={} clConfirmedOffset={}",
                 maxPhysicalPosInLogicQueue, this.commitLog.getMinOffset(), this.commitLog.getMaxOffset(), this.commitLog.getConfirmOffset());
-            this.reputMessageService.setReputFromOffset(maxPhysicalPosInLogicQueue);
+            this.reputMessageService.setReputFromOffset(maxPhysicalPosInLogicQueue);//更新ConsumeQueue中消息偏移的
             this.reputMessageService.start();
 
             /**
@@ -288,7 +285,7 @@ public class DefaultMessageStore implements MessageStore {
                 }
                 Thread.sleep(1000);
                 log.info("Try to finish doing reput the messages fall behind during the starting, reputOffset={} maxOffset={} behind={}", this.reputMessageService.getReputFromOffset(), this.getMaxPhyOffset(), this.dispatchBehindBytes());
-            }
+            }//覆盖commitlog中各个队列的偏移量
             this.recoverTopicQueueTable();
         }
 
@@ -1330,7 +1327,7 @@ public class DefaultMessageStore implements MessageStore {
     private void addScheduleTask() {
 
         /**
-         * 定时10s清理commitlog过期文件 默认72小时消息还没有被消费 就会被删除
+         * 定时60s清理commitlog过期文件 默认72小时消息还没有被消费 就会被删除
          */
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
             @Override

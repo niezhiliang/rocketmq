@@ -101,10 +101,10 @@ public class BrokerStartup {
         try {
             //PackageConflictDetect.detectFastjson();
             Options options = ServerUtil.buildCommandlineOptions(new Options());
-            //解析命令行参数 -n localhost:9876
+            //解析命令行参数 -c 配置文件地址 -n  nameServ地址 localhost:9876
             commandLine = ServerUtil.parseCmdLine("mqbroker", args, buildCommandlineOptions(options),
                 new PosixParser());
-            if (null == commandLine) {
+            if (null == commandLine) {//不带任何参数 直接退出
                 System.exit(-1);
             }
             //创建broker配置
@@ -133,7 +133,7 @@ public class BrokerStartup {
                     InputStream in = new BufferedInputStream(new FileInputStream(file));
                     properties = new Properties();
                     properties.load(in);
-
+                    //设置混合类的各种参数
                     properties2SystemEnv(properties);
                     MixAll.properties2Object(properties, brokerConfig);
                     MixAll.properties2Object(properties, nettyServerConfig);
