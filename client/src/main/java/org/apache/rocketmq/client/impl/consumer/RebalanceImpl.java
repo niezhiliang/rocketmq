@@ -229,7 +229,7 @@ public abstract class RebalanceImpl {
                 }
             }
         }
-
+        //让Topic不是属于我的那些MessageQueue失效，后面队列会被删除
         this.truncateMessageQueueNotMyTopic();
     }
 

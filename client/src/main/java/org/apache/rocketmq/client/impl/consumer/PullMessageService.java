@@ -95,7 +95,6 @@ public class PullMessageService extends ServiceThread {
             try {
                 //取出并删除头部元素
                 PullRequest pullRequest = this.pullRequestQueue.take();
-                System.out.println(System.currentTimeMillis());
                 //真正的拉取操作
                 this.pullMessage(pullRequest);
             } catch (InterruptedException ignored) {

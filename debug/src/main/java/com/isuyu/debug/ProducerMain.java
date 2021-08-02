@@ -34,6 +34,7 @@ public class ProducerMain {
 //        producer.send(new Message("testMsg", "hello broker! I am producer".getBytes()), new SendCallback() {
 //            @Override
 //            public void onSuccess(SendResult sendResult) {
+//                //
 //                System.out.println(sendResult);
 //            }
 //
@@ -42,7 +43,7 @@ public class ProducerMain {
 //
 //            }
 //        });
-        //producer.sendOneway(new Message("testMsg","hello broker! I am producer".getBytes()));
+//        producer.sendOneway(new Message("testMsg","hello broker! I am producer".getBytes()));
         TimeUnit.SECONDS.sleep(3);
         producer.shutdown();
 

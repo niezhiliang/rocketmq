@@ -183,7 +183,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                 //验证group不能为空 字符长度最多255 是否符合给定的正则条件"^[%|a-zA-Z0-9_-]+$"
                 // 不能为默认的组DEFAULT_PRODUCER
                 this.checkConfig();
-                //修改示例名称为当前进程ID
+                //修改实例名称为当前进程ID
                 if (!this.defaultMQProducer.getProducerGroup().equals(MixAll.CLIENT_INNER_PRODUCER_GROUP)) {
                     this.defaultMQProducer.changeInstanceNameToPID();
                 }
@@ -568,7 +568,9 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         final SendCallback sendCallback,
         final long timeout
     ) throws MQClientException, RemotingException, MQBrokerException, InterruptedException {
+        //确认producer状态
         this.makeSureStateOK();
+        //验证消息
         Validators.checkMessage(msg, this.defaultMQProducer);
         final long invokeID = random.nextLong();
         long beginTimestampFirst = System.currentTimeMillis();
