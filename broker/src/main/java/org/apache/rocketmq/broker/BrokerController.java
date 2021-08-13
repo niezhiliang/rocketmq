@@ -277,7 +277,7 @@ public class BrokerController {
          * lod commitlog  --> MappedFileQueue CopyOnWriteArrayList<MappedFile> mappedFiles;
          *                                          topic                  queueId
          * load consumer queue  -->   ConcurrentMap<String, ConcurrentMap<Integer, ConsumeQueue>> consumeQueueTable;
-         * storeCheckpoint  记录commitlog  consumer queue  index 最近的输盘时间点，其中只用该文件的前 24个字节，结构图：https://segmentfault.com/img/bVbpQoU?w=486&h=55
+         * storeCheckpoint  记录commitlog  consumer queue  index 最近的刷盘时间点，其中只用该文件的前 24个字节，结构图：https://segmentfault.com/img/bVbpQoU?w=486&h=55
          * load index --> IndexService.ArrayList<IndexFile> indexFileList
          *
          */

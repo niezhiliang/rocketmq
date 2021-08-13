@@ -29,8 +29,10 @@ public class ProducerMain {
         producer.setNamesrvAddr("localhost:9876");
         //这一步还没拿到broker地址
         producer.start();
+        Message message = new Message("testMsg", "hello broker! I am producer".getBytes());
+        message.setDelayTimeLevel(3);
         //消息发送
-        producer.send(new Message("testMsg","hello broker! I am producer".getBytes()));
+        producer.send(message);
 //        producer.send(new Message("testMsg", "hello broker! I am producer".getBytes()), new SendCallback() {
 //            @Override
 //            public void onSuccess(SendResult sendResult) {

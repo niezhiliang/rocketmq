@@ -113,6 +113,10 @@ public class ScheduleMessageService extends ConfigManager {
     public void start() {
         if (started.compareAndSet(false, true)) {
             this.timer = new Timer("ScheduleMessageTimerThread", true);
+            /**
+             * 为每个延时队列创建一个定时任务
+             *
+             */
             for (Map.Entry<Integer, Long> entry : this.delayLevelTable.entrySet()) {
                 Integer level = entry.getKey();
                 Long timeDelay = entry.getValue();
@@ -221,6 +225,9 @@ public class ScheduleMessageService extends ConfigManager {
         return true;
     }
 
+    /**
+     * 延时任务
+     */
     class DeliverDelayedMessageTimerTask extends TimerTask {
         private final int delayLevel;
         private final long offset;
@@ -259,7 +266,11 @@ public class ScheduleMessageService extends ConfigManager {
             return result;
         }
 
+        /**
+         * 延迟队列具体定时执行的任务
+         */
         public void executeOnTimeup() {
+            //对应延迟等级的队列
             ConsumeQueue cq =
                 ScheduleMessageService.this.defaultMessageStore.findConsumeQueue(TopicValidator.RMQ_SYS_SCHEDULE_TOPIC,
                     delayLevel2QueueId(delayLevel));
@@ -310,6 +321,7 @@ public class ScheduleMessageService extends ConfigManager {
                                                     msgInner.getTopic(), msgInner);
                                             continue;
                                         }
+                                        //添加到延迟消息对应的Topic和Queue中
                                         PutMessageResult putMessageResult =
                                             ScheduleMessageService.this.writeMessageStore
                                                 .putMessage(msgInner);
@@ -371,7 +383,7 @@ public class ScheduleMessageService extends ConfigManager {
                     }
                 }
             } // end of if (cq != null)
-
+            //执行完成继续执行该任务
             ScheduleMessageService.this.timer.schedule(new DeliverDelayedMessageTimerTask(this.delayLevel,
                 failScheduleOffset), DELAY_FOR_A_WHILE);
         }
